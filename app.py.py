@@ -158,7 +158,7 @@ BASE_LAYOUT = """
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .text-matte-gold {
+        .text-white {
             background: linear-gradient(to right, #DFBA73, #C5A059, #9A7B3E);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -194,19 +194,19 @@ BASE_LAYOUT = """
         }
     </script>
 </head>
-<body class="bg-slateWhite text-navyDark min-h-screen flex flex-col font-sans">
+<body class="bg-slateWhite text-white min-h-screen flex flex-col font-sans">
     <nav class="bg-luxury-navy text-white p-5 shadow-2xl flex justify-between items-center border-b-2 border-gold-gradient">
         <div class="flex items-center space-x-4">
-            <div class="w-10 h-10 bg-gold-gradient rounded-full flex items-center justify-center font-black text-navyDark text-xl shadow-lg border border-white/20">🚨</div>
+            <div class="w-10 h-10 bg-gold-gradient rounded-full flex items-center justify-center font-black text-white text-xl shadow-lg border border-white/20">🚨</div>
             <div>
-                <span class="font-extrabold tracking-widest text-sm block uppercase text-matte-gold">NATIONAL POLICE SERVICE — REPUBLC OF KENYA</span>
-                <span class="text-[10px] tracking-widest text-gray-400 block font-mono">DIGITAL OCCURRENCE BOOK & CASE COMMAND CORE</span>
+                <span class="font-extrabold tracking-widest text-sm block uppercase text-white">NATIONAL POLICE SERVICE — REPUBLC OF KENYA</span>
+                <span class="text-[10px] tracking-widest text-white-400 block font-mono">DIGITAL OCCURRENCE BOOK & CASE COMMAND CORE</span>
             </div>
         </div>
         {% if current_user.is_authenticated %}
         <div class="flex items-center space-x-4 text-xs font-mono">
             <div class="bg-securityBlue border border-matteGold/30 px-4 py-2 rounded shadow-inner">
-                <span class="text-matte-gold font-bold text-sm">{{ current_user.rank }} {{ current_user.full_name }}</span> 
+                <span class="text-white font-bold text-sm">{{ current_user.rank }} {{ current_user.full_name }}</span> 
                 <span class="text-gray-400">[{{ current_user.role }}]</span>
                 {% if current_user.station %}
                 <span class="text-amber-400 font-sans font-bold block text-right text-[10px] uppercase mt-0.5">📍 Hub: {{ current_user.station.name }}</span>
@@ -215,24 +215,24 @@ BASE_LAYOUT = """
             <a href="/logout" class="bg-gradient-to-r from-red-800 to-red-950 hover:from-red-900 hover:to-black transition-all text-white border border-red-700 px-4 py-2.5 rounded font-bold uppercase shadow-lg">Logout</a>
         </div>
         {% else %}
-        <a href="/public-portal" class="bg-transparent text-matte-gold border border-matteGold text-xs font-bold px-4 py-2.5 rounded uppercase tracking-widest hover:bg-gold-gradient hover:text-navyDark transition-all duration-300 shadow-md">Public Portal Interface</a>
+        <a href="/public-portal" class="bg-transparent text-white border border-matteGold text-xs font-bold px-4 py-2.5 rounded uppercase tracking-widest hover:bg-gold-gradient hover:text-navyDark transition-all duration-300 shadow-md">Public Portal Interface</a>
         {% endif %}
     </nav>
     <div class="flex flex-1 flex-col md:flex-row">
         {% if current_user.is_authenticated %}
         <div class="w-full md:w-64 bg-luxury-navy text-white p-5 space-y-4 border-r border-matteGold/10 flex flex-col justify-between shadow-2xl">
             <div class="space-y-2">
-                <div class="text-[10px] uppercase font-black text-matte-gold tracking-widest px-2 mb-3 font-mono border-b border-matteGold/20 pb-1">Operations Command</div>
-                <a href="/dashboard" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-matte-gold transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📊 Operations Dashboard</a>
-                <a href="/occurrence-book" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-matte-gold transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📖 Occurrence Book (OB)</a>
-                <a href="/suspect-registry" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-matte-gold transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👥 Suspect Intelligence Registry</a>
+                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 mb-3 font-mono border-b border-matteGold/20 pb-1">Operations Command</div>
+                <a href="/dashboard" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📊 Operations Dashboard</a>
+                <a href="/occurrence-book" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📖 Occurrence Book (OB)</a>
+                <a href="/suspect-registry" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👥 Suspect Intelligence Registry</a>
                 
-                <div class="text-[10px] uppercase font-black text-matte-gold tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Intelligence & Reports</div>
-                <a href="/reports" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-matte-gold transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📈 Statistical Analytics Hub</a>
+                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Intelligence & Reports</div>
+                <a href="/reports" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📈 Statistical Analytics Hub</a>
                 
                 {% if current_user.role in ['Administrator', 'OCS'] %}
-                <div class="text-[10px] uppercase font-black text-matte-gold tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Administration Control</div>
-                <a href="/officer-management" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-matte-gold transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👮 Command Force Roster</a>
+                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Administration Control</div>
+                <a href="/officer-management" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👮 Command Force Roster</a>
                 {% endif %}
                 {% if current_user.role == 'Administrator' %}
                 <a href="/audit-logs" class="block p-3 rounded text-xs font-mono text-gray-400 hover:bg-securityBlue hover:text-red-400 transition-all border-l-4 border-transparent hover:border-red-500">🛡️ Security Logs</a>
@@ -347,7 +347,7 @@ def public_portal():
         
     html = """
     <div class="max-w-2xl mx-auto bg-white rounded-xl shadow-2xl overflow-hidden mt-6 border border-matteGold/20">
-        <div class="bg-luxury-navy p-6 text-white text-center font-bold text-sm uppercase tracking-widest border-b-2 border-gold-gradient text-matte-gold">
+        <div class="bg-luxury-navy p-6 text-white text-center font-bold text-sm uppercase tracking-widest border-b-2 border-gold-gradient text-white">
             Public Citizen Case Status Verification Portal
         </div>
         <div class="p-6 bg-gray-50 border-b">
@@ -358,7 +358,7 @@ def public_portal():
                     <div class="flex space-x-2">
                         <input type="text" name="ob_number" placeholder="e.g., OB/2026/000001" required 
                                class="flex-1 p-3.5 border font-mono text-sm rounded-lg uppercase outline-none luxury-input transition-all duration-200">
-                        <button type="submit" class="bg-luxury-navy hover:bg-securityBlue border border-matteGold/30 text-matte-gold font-extrabold px-6 py-3.5 rounded-lg text-xs uppercase tracking-widest transition-all duration-300 shadow-lg">
+                        <button type="submit" class="bg-luxury-navy hover:bg-securityBlue border border-matteGold/30 text-white font-extrabold px-6 py-3.5 rounded-lg text-xs uppercase tracking-widest transition-all duration-300 shadow-lg">
                             Verify File Status
                         </button>
                     </div>
@@ -409,7 +409,7 @@ def public_portal():
         </div>
     </div>
     <div class="text-center mt-8">
-        <a href="/login" class="text-xs font-black uppercase text-securityBlue hover:text-matteGold border-b border-dashed border-matteGold pb-0.5 tracking-widest font-mono transition-all duration-200">
+        <a href="/login" class="text-xs font-black uppercase text-securityBlue hover:text-white border-b border-dashed border-matteGold pb-0.5 tracking-widest font-mono transition-all duration-200">
             &rarr; Terminal Command Frame Login Portal &larr;
         </a>
     </div>
@@ -431,7 +431,7 @@ def login():
     
     html = """
     <div class="max-w-md mx-auto bg-white rounded-xl shadow-2xl overflow-hidden mt-12 border border-matteGold/20">
-        <div class="bg-luxury-navy text-white p-6 text-center font-bold text-sm uppercase tracking-widest border-b-2 border-gold-gradient text-matte-gold">
+        <div class="bg-luxury-navy text-white p-6 text-center font-bold text-sm uppercase tracking-widest border-b-2 border-gold-gradient text-white">
             Infrastructure Gateway Authorization
         </div>
         <form method="POST" class="p-6 space-y-4 bg-white">
@@ -444,7 +444,7 @@ def login():
                 <label class="block text-[10px] font-mono font-black uppercase tracking-wider text-gray-500 mb-1">Command Passcode Cipher</label>
                 <input type="password" name="password" required class="w-full p-3.5 text-xs border rounded-lg bg-white outline-none luxury-input transition-all duration-200">
             </div>
-            <button type="submit" class="w-full bg-luxury-navy hover:bg-securityBlue text-matte-gold font-black p-4 rounded-lg text-xs uppercase tracking-widest border border-matteGold/30 shadow-xl transition-all duration-300 mt-2">
+            <button type="submit" class="w-full bg-luxury-navy hover:bg-securityBlue text-white font-black p-4 rounded-lg text-xs uppercase tracking-widest border border-matteGold/30 shadow-xl transition-all duration-300 mt-2">
                 Validate Authorization Key
             </button>
         </form>
@@ -483,7 +483,7 @@ def dashboard():
     <div class="space-y-6 font-sans">
         <h1 class="text-xl font-black text-navyDark uppercase tracking-widest border-b pb-3 border-matteGold/20 flex justify-between items-center">
             <span>📊 Core Command Operations Metrics Hub</span>
-            <span class="text-xs font-mono font-normal text-matte-gold bg-luxury-navy px-3 py-1 rounded border border-matteGold/30 shadow-inner">Operational Ready Suite</span>
+            <span class="text-xs font-mono font-normal text-white bg-luxury-navy px-3 py-1 rounded border border-matteGold/30 shadow-inner">Operational Ready Suite</span>
         </h1>
         
         <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
@@ -507,17 +507,17 @@ def dashboard():
         
         <div class="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
             <div class="bg-white p-5 rounded-xl luxury-card text-center border border-matteGold/15">
-                <div class="text-[10px] uppercase font-mono font-black text-matte-gold tracking-widest mb-1">Apprehensions</div>
+                <div class="text-[10px] uppercase font-mono font-black text-white tracking-widest mb-1">Apprehensions</div>
                 <div class="text-4xl font-black text-indigo-950">{{ arrests }}</div>
                 <p class="text-[10px] text-gray-400 font-mono mt-1">Validated local lockup tracks</p>
             </div>
             <div class="bg-white p-5 rounded-xl luxury-card text-center border border-matteGold/15">
-                <div class="text-[10px] uppercase font-mono font-black text-matte-gold tracking-widest mb-1">Station Officers Force</div>
+                <div class="text-[10px] uppercase font-mono font-black text-white tracking-widest mb-1">Station Officers Force</div>
                 <div class="text-4xl font-black text-teal-950">{{ off_count }}</div>
                 <p class="text-[10px] text-gray-400 font-mono mt-1">Active system framework nodes</p>
             </div>
             <div class="bg-white p-5 rounded-xl luxury-card text-center border border-matteGold/15">
-                <div class="text-[10px] uppercase font-mono font-black text-matte-gold tracking-widest mb-1">Vault Evidence files</div>
+                <div class="text-[10px] uppercase font-mono font-black text-white tracking-widest mb-1">Vault Evidence files</div>
                 <div class="text-4xl font-black text-rose-950">{{ evidence_count }}</div>
                 <p class="text-[10px] text-gray-400 font-mono mt-1">Binary crypto blocks committed</p>
             </div>
@@ -530,7 +530,7 @@ def dashboard():
             </h3>
             <div class="h-48 flex items-center justify-center bg-luxury-navy rounded-xl p-6 border border-matteGold/20 shadow-inner">
                 <div class="w-full max-w-lg px-6 text-center space-y-3">
-                    <p class="font-mono font-black text-matte-gold tracking-widest text-[11px]">REAL-TIME DATA-STREAM GRAPH MATRIX CAPTURED</p>
+                    <p class="font-mono font-black text-white tracking-widest text-[11px]">REAL-TIME DATA-STREAM GRAPH MATRIX CAPTURED</p>
                     <div class="w-full bg-securityBlue border border-matteGold/20 h-4 rounded-full overflow-hidden flex p-0.5 shadow-lg">
                         <div class="bg-gold-gradient h-full rounded-l-full" style="width: 40%"></div>
                         <div class="bg-blue-500 h-full" style="width: 30%"></div>
@@ -597,7 +597,7 @@ def occurrence_book():
     <div class="space-y-6">
         {% if current_user.role in ['Desk Officer', 'Administrator'] %}
         <div class="bg-white p-6 rounded-xl border border-matteGold/15 luxury-card">
-            <h2 class="text-xs font-mono font-black uppercase mb-4 border-b pb-2 text-matte-gold tracking-widest flex items-center space-x-2">
+            <h2 class="text-xs font-mono font-black uppercase mb-4 border-b pb-2 text-white tracking-widest flex items-center space-x-2">
                 <span>📝 Append New Primary Incident Occurrence Log</span>
             </h2>
             <form method="POST" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
@@ -644,7 +644,7 @@ def occurrence_book():
                     <label class="block font-black text-gray-500 mb-1 tracking-wide">Exhaustive Deposition Transcript Statement Text Narrative</label>
                     <textarea name="narrative" rows="3" required class="w-full p-3 border rounded-lg bg-white font-sans outline-none luxury-input text-xs leading-relaxed"></textarea>
                 </div>
-                <button type="submit" class="md:col-span-3 bg-luxury-navy text-matte-gold border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
+                <button type="submit" class="md:col-span-3 bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
                     Lock Entry Matrix Segment Block Permanently to DB Memory
                 </button>
             </form>
@@ -652,7 +652,7 @@ def occurrence_book():
         {% endif %}
         
         <div class="bg-white border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
-            <div class="bg-luxury-navy p-4 text-matte-gold font-mono font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
+            <div class="bg-luxury-navy p-4 text-white font-mono font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
                 📖 Active System Ledger Journal Stream Table Data View
             </div>
             <div class="overflow-x-auto">
@@ -684,7 +684,7 @@ def occurrence_book():
                                 </span>
                             </td>
                             <td class="p-4 flex space-x-2 justify-center font-mono">
-                                <a href="/case-workspace/{{ r.id }}" class="bg-luxury-navy text-matte-gold border border-matteGold/30 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-securityBlue transition-all">Workspace</a>
+                                <a href="/case-workspace/{{ r.id }}" class="bg-luxury-navy text-white border border-matteGold/30 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-securityBlue transition-all">Workspace</a>
                                 <a href="/abstract/download/{{ r.id }}" class="bg-gold-gradient text-navyDark px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider hover:opacity-90 transition-all shadow-sm">PDF Abstract</a>
                             </td>
                         </tr>
@@ -711,14 +711,14 @@ def case_workspace(entry_id):
     <div class="space-y-6">
         <div class="border-b pb-3 border-matteGold/20 flex justify-between items-center">
             <h1 class="text-xl font-black text-navyDark uppercase font-mono tracking-wide flex items-center">
-                <span>🔍 Case Investigative Shell Terminal: <span class="text-matte-gold">{{ entry.ob_number }}</span></span>
+                <span>🔍 Case Investigative Shell Terminal: <span class="text-white">{{ entry.ob_number }}</span></span>
             </h1>
-            <span class="px-4 py-1.5 bg-luxury-navy border border-matteGold/30 text-matte-gold font-mono text-xs font-bold rounded-lg shadow-md">Jurisdiction Hub: {{ entry.station.name }}</span>
+            <span class="px-4 py-1.5 bg-luxury-navy border border-matteGold/30 text-white font-mono text-xs font-bold rounded-lg shadow-md">Jurisdiction Hub: {{ entry.station.name }}</span>
         </div>
         
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
             <div class="bg-white p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4 font-mono">
-                <h3 class="font-black border-b border-matteGold/10 pb-2 text-matte-gold uppercase text-xs tracking-wider">Primary Core Parameters</h3>
+                <h3 class="font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">Primary Core Parameters</h3>
                 <div class="space-y-2.5">
                     <p class="text-gray-400">Complainant File Identity: <span class="text-navyDark font-sans font-black block text-sm mt-0.5">{{ entry.complainant_name }}</span></p>
                     <p class="text-gray-400">National ID Token: <span class="text-navyDark font-bold block mt-0.5">{{ entry.national_id }}</span></p>
@@ -746,7 +746,7 @@ def case_workspace(entry_id):
                             <option value="{{ inv.id }}" {% if entry.investigator_id == inv.id %} selected {% endif %}>{{ inv.rank }} {{ inv.full_name }}</option>
                             {% endfor %}
                         </select>
-                        <button type="submit" class="w-full bg-luxury-navy text-matte-gold border border-matteGold/30 font-bold py-2 rounded-lg uppercase text-[10px] tracking-widest hover:opacity-90 transition-all shadow-md">Mutate Investigator Link</button>
+                        <button type="submit" class="w-full bg-luxury-navy text-white border border-matteGold/30 font-bold py-2 rounded-lg uppercase text-[10px] tracking-widest hover:opacity-90 transition-all shadow-md">Mutate Investigator Link</button>
                     </form>
                     
                     <form action="/case-workspace/{{ entry.id }}/status" method="POST" class="space-y-2 border-t border-gray-100 pt-3">
@@ -767,7 +767,7 @@ def case_workspace(entry_id):
             
             <div class="lg:col-span-2 space-y-6">
                 <div class="bg-white p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4">
-                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-matte-gold uppercase text-xs tracking-wider">Linked Target Suspect Profile Associations</h3>
+                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">Linked Target Suspect Profile Associations</h3>
                     <div class="flex flex-wrap gap-2.5">
                         {% for sus in entry.suspects %}
                         <div class="bg-red-50 border border-red-200 p-3 rounded-lg flex items-center space-x-3 text-xs font-mono shadow-sm">
@@ -795,19 +795,19 @@ def case_workspace(entry_id):
                                 {% endfor %}
                             </select>
                         </div>
-                        <button type="submit" class="bg-luxury-navy text-matte-gold border border-matteGold/30 px-5 py-2.5 font-mono rounded-lg text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-md">Bind Link</button>
+                        <button type="submit" class="bg-luxury-navy text-white border border-matteGold/30 px-5 py-2.5 font-mono rounded-lg text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-md">Bind Link</button>
                     </form>
                     {% endif %}
                 </div>
                 
                 <div class="bg-white p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4">
-                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-matte-gold uppercase text-xs tracking-wider">Chronological Case Ledger Matrix Journal</h3>
+                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">Chronological Case Ledger Matrix Journal</h3>
                     <div class="space-y-3 max-h-72 overflow-y-auto font-mono text-[11px] pr-1">
                         {% for note in entry.notes %}
                         <div class="p-3.5 bg-gray-50 border border-gray-200 rounded-lg shadow-inner space-y-1.5">
                             <div class="flex justify-between text-[9px] text-gray-400 font-black tracking-widest uppercase border-b border-gray-200/60 pb-1">
                                 <span>🕒 Index Clock: {{ note.timestamp.strftime('%Y-%m-%d %H:%M:%S') }} UTC</span>
-                                <span class="bg-luxury-navy border border-matteGold/20 text-matte-gold px-2 py-0.5 rounded text-[8px] tracking-wide">Actor: {{ note.recorded_by }}</span>
+                                <span class="bg-luxury-navy border border-matteGold/20 text-white px-2 py-0.5 rounded text-[8px] tracking-wide">Actor: {{ note.recorded_by }}</span>
                             </div>
                             <p class="font-sans text-gray-800 text-xs leading-relaxed font-semibold">
                                 <span class="text-[9px] font-mono font-black px-2 py-0.5 bg-slate-200 rounded text-slate-700 uppercase mr-1 tracking-wide">[{{ note.note_type }}]</span>
@@ -835,7 +835,7 @@ def case_workspace(entry_id):
                                 <div class="flex space-x-2">
                                     <input type="text" name="text_content" required placeholder="Append field updates into journal pipeline..." 
                                            class="flex-1 p-2.5 border font-sans text-xs bg-white rounded-lg outline-none luxury-input">
-                                    <button type="submit" class="bg-luxury-navy text-matte-gold border border-matteGold/30 font-black px-5 rounded-lg text-xs uppercase tracking-widest hover:opacity-90 transition-all shadow-md">Commit</button>
+                                    <button type="submit" class="bg-luxury-navy text-white border border-matteGold/30 font-black px-5 rounded-lg text-xs uppercase tracking-widest hover:opacity-90 transition-all shadow-md">Commit</button>
                                 </div>
                             </div>
                         </div>
@@ -844,16 +844,16 @@ def case_workspace(entry_id):
                 </div>
                 
                 <div class="bg-white p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4">
-                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-matte-gold uppercase text-xs tracking-wider">🔒 Secure Vault Evidence Repository</h3>
+                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">🔒 Secure Vault Evidence Repository</h3>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono text-[10px]">
                         {% for file in entry.evidence_files %}
                         <div class="bg-gray-50 border border-gray-200 p-3 rounded-lg text-center space-y-2 flex flex-col justify-between shadow-sm relative overflow-hidden">
-                            <div class="w-full h-12 bg-luxury-navy text-matte-gold flex items-center justify-center font-black rounded-lg text-xl tracking-widest shadow-inner border border-matteGold/10">
+                            <div class="w-full h-12 bg-luxury-navy text-white flex items-center justify-center font-black rounded-lg text-xl tracking-widest shadow-inner border border-matteGold/10">
                                 📑
                             </div>
                             <div class="truncate text-gray-700 font-extrabold text-xs" title="{{ file.original_name }}">{{ file.original_name }}</div>
                             <div class="text-[8px] text-gray-400 uppercase truncate">By: {{ file.uploaded_by }}</div>
-                            <a href="/vault/download/{{ file.id }}" class="bg-luxury-navy hover:bg-securityBlue border border-matteGold/20 text-matte-gold text-[9px] py-1.5 rounded-md font-black block uppercase tracking-widest transition-all duration-150 shadow-sm">Retrieve File</a>
+                            <a href="/vault/download/{{ file.id }}" class="bg-luxury-navy hover:bg-securityBlue border border-matteGold/20 text-white text-[9px] py-1.5 rounded-md font-black block uppercase tracking-widest transition-all duration-150 shadow-sm">Retrieve File</a>
                         </div>
                         {% else %}
                         <p class="col-span-2 md:col-span-4 text-gray-400 italic font-mono text-xs py-1">No binary stream payload blocks associated with this case file configuration record sequence.</p>
@@ -865,7 +865,7 @@ def case_workspace(entry_id):
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="flex-1">
                             <label class="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Stream Payload Binary Block File Upload</label>
-                            <input type="file" name="evidence_payload" required class="w-full p-2 border text-xs bg-white rounded-lg outline-none luxury-input cursor-pointer file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-black file:uppercase file:bg-luxury-navy file:text-matte-gold file:cursor-pointer">
+                            <input type="file" name="evidence_payload" required class="w-full p-2 border text-xs bg-white rounded-lg outline-none luxury-input cursor-pointer file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-black file:uppercase file:bg-luxury-navy file:text-white file:cursor-pointer">
                         </div>
                         <button type="submit" class="bg-gradient-to-r from-emerald-700 to-emerald-900 border border-emerald-600 text-white font-black px-5 py-2.5 rounded-lg text-xs uppercase tracking-wider hover:opacity-95 transition-all shadow-md">
                             Upload Injection
@@ -1064,7 +1064,7 @@ def suspect_registry():
     <div class="space-y-6">
         {% if current_user.role in ['Investigator', 'Administrator'] %}
         <div class="bg-white p-6 rounded-xl border border-matteGold/15 luxury-card">
-            <h2 class="text-xs font-mono font-black uppercase mb-4 border-b pb-2 text-matte-gold tracking-widest">
+            <h2 class="text-xs font-mono font-black uppercase mb-4 border-b pb-2 text-white tracking-widest">
                 👥 Insert Target Criminal Suspect Profile Module
             </h2>
             <form method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-mono">
@@ -1101,7 +1101,7 @@ def suspect_registry():
                     <label class="block font-black text-gray-500 mb-1 tracking-wide">Prior Convictions Historical Summary</label>
                     <textarea name="arrest_history_summary" rows="2" placeholder="Detail standard active warrant identifiers or historical penological data..." class="w-full p-3 border rounded-lg bg-white font-sans outline-none luxury-input text-xs leading-relaxed"></textarea>
                 </div>
-                <button type="submit" class="md:col-span-4 bg-luxury-navy text-matte-gold border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
+                <button type="submit" class="md:col-span-4 bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
                     Lock Suspect Dossier into Intelligence Ledger Matrix Memory
                 </button>
             </form>
@@ -1109,7 +1109,7 @@ def suspect_registry():
         {% endif %}
         
         <div class="bg-white border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
-            <div class="bg-luxury-navy p-4 text-matte-gold font-mono font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
+            <div class="bg-luxury-navy p-4 text-white font-mono font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
                 👤 Intelligence Profile Central Registry Data Matrix
             </div>
             <div class="overflow-x-auto">
@@ -1204,7 +1204,7 @@ def officer_management():
     html = """
     <div class="space-y-6 font-mono text-xs">
         <div class="bg-white p-6 rounded-xl border border-matteGold/15 luxury-card">
-            <h2 class="text-xs font-black uppercase mb-4 border-b pb-2 text-matte-gold tracking-widest">
+            <h2 class="text-xs font-black uppercase mb-4 border-b pb-2 text-white tracking-widest">
                 👮 Authorize New Active Force Personnel Credentials Block
             </h2>
             <form method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1261,14 +1261,14 @@ def officer_management():
                         {% endfor %}
                     </select>
                 </div>
-                <button type="submit" class="md:col-span-4 bg-luxury-navy text-matte-gold border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
+                <button type="submit" class="md:col-span-4 bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
                     Provision Account Credentials Block and Append onto Roster
                 </button>
             </form>
         </div>
         
         <div class="bg-white border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
-            <div class="bg-luxury-navy p-4 text-matte-gold font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
+            <div class="bg-luxury-navy p-4 text-white font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
                 👮 Operational Police Force Roster Schema Map View
             </div>
             <div class="overflow-x-auto">
@@ -1307,7 +1307,7 @@ def officer_management():
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="action_flag" value="toggle_status">
                                     <input type="hidden" name="target_user_id" value="{{ o.id }}">
-                                    <button type="submit" class="text-[9px] font-black uppercase px-3 py-1.5 bg-gray-100 border border-gray-200 hover:bg-luxury-navy hover:text-matte-gold hover:border-matteGold/30 rounded-lg transition-all shadow-sm">
+                                    <button type="submit" class="text-[9px] font-black uppercase px-3 py-1.5 bg-gray-100 border border-gray-200 hover:bg-luxury-navy hover:text-white hover:border-matteGold/30 rounded-lg transition-all shadow-sm">
                                         Toggle Access Boundary Keys
                                     </button>
                                 </form>
@@ -1369,7 +1369,7 @@ def reports():
                             
     html = """
     <div class="space-y-6 font-mono text-xs max-w-xl mx-auto mt-6 bg-white p-6 border border-matteGold/15 rounded-xl luxury-card">
-        <h2 class="text-sm font-black uppercase text-matte-gold border-b border-matteGold/10 pb-2 mb-4 tracking-widest text-center">
+        <h2 class="text-sm font-black uppercase text-white border-b border-matteGold/10 pb-2 mb-4 tracking-widest text-center">
             📊 Statistical Data Extraction Pipeline
         </h2>
         <p class="text-gray-500 font-sans leading-relaxed text-center">
@@ -1393,7 +1393,7 @@ def reports():
                     <option value="excel">Microsoft Excel Binary Spreadsheet (.xlsx)</option>
                 </select>
             </div>
-            <button type="submit" class="w-full bg-luxury-navy text-matte-gold border border-matteGold/30 font-black p-4 rounded-lg text-xs uppercase tracking-widest shadow-xl transition-all duration-200 mt-2 hover:opacity-90">
+            <button type="submit" class="w-full bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg text-xs uppercase tracking-widest shadow-xl transition-all duration-200 mt-2 hover:opacity-90">
                 Actuate Compilation Extraction Core
             </button>
         </form>
@@ -1414,7 +1414,7 @@ def audit_logs():
         <div class="bg-white border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
             <div class="overflow-x-auto">
                 <table class="w-full text-left font-mono text-[11px] border-collapse">
-                    <thead class="bg-luxury-navy text-matte-gold uppercase text-[9px] tracking-widest border-b border-matteGold/20">
+                    <thead class="bg-luxury-navy text-white uppercase text-[9px] tracking-widest border-b border-matteGold/20">
                         <tr class="divide-x divide-matteGold/10">
                             <th class="p-3">System Clock Timestamp</th>
                             <th class="p-3">Validated Actor Node Identity</th>
