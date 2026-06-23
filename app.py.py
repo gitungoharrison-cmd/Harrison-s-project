@@ -1510,7 +1510,36 @@ if __name__ == '__main__':
             db.session.add_all([sus1, sus2])
             db.session.commit()
             
-    if __name__ == "__main__":
-        import os
-        port = int(os.environ.get("PORT", 5000))
-        app.run(host="0.0.0.0", port=port)
+# --- BULK DATA INSERTION FEATURE ---
+@app.route('/seed_test_data')
+@login_required
+def seed_test_data():
+    # Only allow Administrators to perform bulk data insertion
+    if current_user.role != 'Administrator':
+        flash("Unauthorized access: Administrator privileges required.", "danger")
+        return redirect(url_for('dashboard'))
+    
+    # Bulk insert 1,234 test records
+    try:
+        for i in range(1, 1235):
+            new_entry = OBEntry(
+                ob_number=f"OB-{20000 + i}",
+                complainant_name=f"Test Citizen {i}",
+                crime_category="Investigation",
+                narrative=f"System stress test entry number {i}. Generated for operational validation.",
+                status="Pending",
+                station_id=1
+            )
+            db.session.add(new_entry)
+        
+        db.session.commit()
+        return f"Successfully committed 1,234 test records to the DPOB Ledger."
+    except Exception as e:
+        db.session.rollback()
+        return f"An error occurred during bulk insertion: {str(e)}"
+
+# --- APPLICATION EXECUTION ---
+if __name__ == "__main__":
+    with app.app_context():
+        db.create_all()
+    app.run(host="0.0.0.0", port=5000, debug=True)
