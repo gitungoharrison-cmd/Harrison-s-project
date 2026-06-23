@@ -158,25 +158,32 @@ BASE_LAYOUT = """
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* High contrast text for body */
-        body { color: #1a202c !important; }
-        
-        .gold-text-gradient {
-            background: linear-gradient(to right, #9A7B3E, #C5A059);
+        .text-matte-gold { color: #C5A059; }
+        .text-matte-gold-gradient {
+            background: linear-gradient(to right, #DFBA73, #C5A059, #9A7B3E);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .bg-luxury-navy { background: #0B132B; }
-        .bg-matte-gold-light { background: #fdfaf6; }
+        .bg-gold-gradient {
+            background: linear-gradient(135deg, #DFBA73 0%, #C5A059 50%, #9A7B3E 100%);
+        }
+        .bg-luxury-navy {
+            background: linear-gradient(180deg, #050B14 0%, #0B132B 100%);
+        }
         .luxury-card {
-            background: #ffffff;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            background: #ffffff; /* Changed from invalid #matte-gold */
+            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
             border: 1px solid #e2e8f0;
         }
     </style>
+    <script>
+        tailwind.config = {
+            theme: { extend: { colors: { matteGold: '#C5A059', luxuryNavy: '#0B132B', slatematteGold: '#F4F5F7' } } }
+        }
+    </script>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col font-sans">
-    <nav class="bg-luxury-navy text-white p-5 shadow-lg flex justify-between items-center">
+<body class="bg-gray-100 text-gray-800 min-h-screen flex flex-col font-sans">
+    <nav class="bg-luxury-navy text-white p-5 shadow-2xl flex justify-between items-center border-b-2 border-amber-600">
         <div class="flex items-center space-x-4">
             <div class="w-10 h-10 bg-amber-600 rounded-full flex items-center justify-center font-black text-white">🚨</div>
             <div>
@@ -190,8 +197,15 @@ BASE_LAYOUT = """
         </div>
         {% endif %}
     </nav>
-    <div class="flex flex-1 p-6">
-        <div class="flex-1 max-w-6xl mx-auto">
+    <div class="flex flex-1">
+        {% if current_user.is_authenticated %}
+        <div class="w-64 bg-slate-900 text-white p-5 space-y-2">
+            <a href="/dashboard" class="block p-2 hover:bg-slate-800 rounded">📊 Dashboard</a>
+            <a href="/occurrence-book" class="block p-2 hover:bg-slate-800 rounded">📖 Occurrence Book</a>
+            <a href="/suspect-registry" class="block p-2 hover:bg-slate-800 rounded">👥 Suspect Registry</a>
+        </div>
+        {% endif %}
+        <div class="flex-1 p-6">
             __RENDER_SLOT__
         </div>
     </div>
