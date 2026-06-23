@@ -158,108 +158,46 @@ BASE_LAYOUT = """
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        .text-white {
-            background: linear-gradient(to right, #DFBA73, #C5A059, #9A7B3E);
+        /* High contrast text for body */
+        body { color: #1a202c !important; }
+        
+        .gold-text-gradient {
+            background: linear-gradient(to right, #9A7B3E, #C5A059);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .bg-gold-gradient {
-            background: linear-gradient(135deg, #DFBA73 0%, #C5A059 50%, #9A7B3E 100%);
-        }
-        .bg-luxury-navy {
-            background: linear-gradient(180deg, #050B14 0%, #0B132B 100%);
-        }
+        .bg-luxury-navy { background: #0B132B; }
+        .bg-matte-gold-light { background: #fdfaf6; }
         .luxury-card {
-            background: #matte-gold;
-            box-shadow: 0 10px 30px -5px rgba(5, 11, 20, 0.06), 0 4px 12px -2px rgba(197, 160, 89, 0.1);
-            border: 1px solid rgba(197, 160, 89, 0.15);
-        }
-        .luxury-input:focus {
-            border-color: #C5A059;
-            box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.2);
+            background: #ffffff;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e2e8f0;
         }
     </style>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        navyDark: '#050B14',
-                        securityBlue: '#0B132B',
-                        matteGold: '#C5A059',
-                        slatematte-gold: '#F4F5F7'
-                    }
-                }
-            }
-        }
-    </script>
 </head>
-<body class="bg-slatematte-gold text-white min-h-screen flex flex-col font-sans">
-    <nav class="bg-luxury-navy text-white p-5 shadow-2xl flex justify-between items-center border-b-2 border-gold-gradient">
+<body class="bg-gray-100 min-h-screen flex flex-col font-sans">
+    <nav class="bg-luxury-navy text-white p-5 shadow-lg flex justify-between items-center">
         <div class="flex items-center space-x-4">
-            <div class="w-10 h-10 bg-gold-gradient rounded-full flex items-center justify-center font-black text-white text-xl shadow-lg border border-matte-gold/20">🚨</div>
+            <div class="w-10 h-10 bg-amber-600 rounded-full flex items-center justify-center font-black text-white">🚨</div>
             <div>
-                <span class="font-extrabold tracking-widest text-sm block uppercase text-white">NATIONAL POLICE SERVICE — REPUBLC OF KENYA</span>
-                <span class="text-[10px] tracking-widest text-white-400 block font-mono">DIGITAL OCCURRENCE BOOK & CASE COMMAND CORE</span>
+                <span class="font-bold tracking-widest text-sm block uppercase">NATIONAL POLICE SERVICE</span>
             </div>
         </div>
         {% if current_user.is_authenticated %}
-        <div class="flex items-center space-x-4 text-xs font-mono">
-            <div class="bg-securityBlue border border-matteGold/30 px-4 py-2 rounded shadow-inner">
-                <span class="text-white font-bold text-sm">{{ current_user.rank }} {{ current_user.full_name }}</span> 
-                <span class="text-gray-400">[{{ current_user.role }}]</span>
-                {% if current_user.station %}
-                <span class="text-amber-400 font-sans font-bold block text-right text-[10px] uppercase mt-0.5">📍 Hub: {{ current_user.station.name }}</span>
-                {% endif %}
-            </div>
-            <a href="/logout" class="bg-gradient-to-r from-red-800 to-red-950 hover:from-red-900 hover:to-black transition-all text-white border border-red-700 px-4 py-2.5 rounded font-bold uppercase shadow-lg">Logout</a>
+        <div class="flex items-center space-x-4 text-xs">
+            <span class="font-bold">{{ current_user.rank }} {{ current_user.full_name }}</span>
+            <a href="/logout" class="bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded">Logout</a>
         </div>
-        {% else %}
-        <a href="/public-portal" class="bg-transparent text-white border border-matteGold text-xs font-bold px-4 py-2.5 rounded uppercase tracking-widest hover:bg-gold-gradient hover:text-navyDark transition-all duration-300 shadow-md">Public Portal Interface</a>
         {% endif %}
     </nav>
-    <div class="flex flex-1 flex-col md:flex-row">
-        {% if current_user.is_authenticated %}
-        <div class="w-full md:w-64 bg-luxury-navy text-white p-5 space-y-4 border-r border-matteGold/10 flex flex-col justify-between shadow-2xl">
-            <div class="space-y-2">
-                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 mb-3 font-mono border-b border-matteGold/20 pb-1">Operations Command</div>
-                <a href="/dashboard" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📊 Operations Dashboard</a>
-                <a href="/occurrence-book" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📖 Occurrence Book (OB)</a>
-                <a href="/suspect-registry" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👥 Suspect Intelligence Registry</a>
-                
-                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Intelligence & Reports</div>
-                <a href="/reports" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📈 Statistical Analytics Hub</a>
-                
-                {% if current_user.role in ['Administrator', 'OCS'] %}
-                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Administration Control</div>
-                <a href="/officer-management" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👮 Command Force Roster</a>
-                {% endif %}
-                {% if current_user.role == 'Administrator' %}
-                <a href="/audit-logs" class="block p-3 rounded text-xs font-mono text-gray-400 hover:bg-securityBlue hover:text-red-400 transition-all border-l-4 border-transparent hover:border-red-500">🛡️ Security Logs</a>
-                {% endif %}
-            </div>
-            <div class="pt-6 border-t border-matteGold/10 text-center text-[10px] text-gray-500 font-mono tracking-wider">
-                DPOBCMS v3.0.26<br>Secure Crypt Ledger Stack
-            </div>
-        </div>
-        {% endif %}
-        <div class="flex-1 p-6 md:p-10 overflow-x-hidden">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, msg in messages %}
-                        <div class="mb-6 p-4 text-xs font-bold rounded border shadow-xl font-mono {% if category == 'danger' %} bg-red-50 text-red-900 border-red-300 {% else %} bg-emerald-50 text-emerald-900 border-emerald-300 {% endif %}">
-                            ⚡ STATUS NOTIFICATION: {{ msg }}
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
+    <div class="flex flex-1 p-6">
+        <div class="flex-1 max-w-6xl mx-auto">
             __RENDER_SLOT__
         </div>
     </div>
 </body>
 </html>
 """
-
 def generate_nps_response(inner_html, **kwargs):
     return render_template_string(BASE_LAYOUT.replace('__RENDER_SLOT__', inner_html), **kwargs)
 
