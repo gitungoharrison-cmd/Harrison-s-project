@@ -185,7 +185,7 @@ BASE_LAYOUT = """
                         mediumblue: '#050B14',
                         securityBlue: '#0B132B',
                         matteGold: '#C5A059',
-                        slateblack: '#F4F5F7'
+                        slateblack: '#050B14'
                     }
                 }
             }
@@ -309,7 +309,8 @@ def build_pdf_abstract(ob, stream):
     t = Table(table_data, colWidths=[160, 380])
     t.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#0B132B')),
-        ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#F4F5F7')),
+        ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#050B14')),
+        ('TEXTCOLOR',(0;0),(0,-1),colorwhite),
         ('PADDING', (0,0), (-1,-1), 6),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
     ]))
@@ -495,7 +496,7 @@ def dashboard():
             </div>
             <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-blue-500">
                 <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Active Investigations</div>
-                <div class="text-3xl font-black text-blue-600 mt-1">{{ ui }}</div>
+                <div class="text-3xl font-black text-white-600 mt-1">{{ ui }}</div>
             </div>
             <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-emerald-500">
                 <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Closed Records</div>
@@ -675,7 +676,7 @@ def occurrence_book():
                             <td class="p-4">
                                 <span class="text-[9px] font-mono font-black uppercase border px-2.5 py-1 rounded-full shadow-sm
                                            {% if r.status == 'Pending Review' %} bg-amber-50 text-amber-800 border-amber-300
-                                           {% elif r.status == 'Under Investigation' %} bg-blue-50 text-blue-800 border-blue-300
+                                           {% elif r.status == 'Under Investigation' %} bg-blue-50 text-white-800 border-blue-300
                                            {% elif r.status == 'Closed' %} bg-emerald-50 text-emerald-800 border-emerald-300
                                            {% else %} bg-purple-50 text-purple-800 border-purple-300 {% endif %}">
                                     {{ r.status }}
