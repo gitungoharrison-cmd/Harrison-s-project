@@ -182,7 +182,7 @@ BASE_LAYOUT = """
             theme: {
                 extend: {
                     colors: {
-                        navyDark: '#050B14',
+                        mediumblue: '#050B14',
                         securityBlue: '#0B132B',
                         matteGold: '#C5A059',
                         slateblack: '#F4F5F7'
@@ -213,7 +213,7 @@ BASE_LAYOUT = """
             <a href="/logout" class="bg-gradient-to-r from-red-800 to-red-950 hover:from-red-900 hover:to-black transition-all text-white border border-red-700 px-4 py-2.5 rounded font-bold uppercase shadow-lg">Logout</a>
         </div>
         {% else %}
-        <a href="/public-portal" class="bg-transparent text-white border border-matteGold text-xs font-bold px-4 py-2.5 rounded uppercase tracking-widest hover:bg-gold-gradient hover:text-navyDark transition-all duration-300 shadow-md">Public Portal Interface</a>
+        <a href="/public-portal" class="bg-transparent text-white border border-matteGold text-xs font-bold px-4 py-2.5 rounded uppercase tracking-widest hover:bg-gold-gradient hover:text-mediumblue transition-all duration-300 shadow-md">Public Portal Interface</a>
         {% endif %}
     </nav>
     <div class="flex flex-1 flex-col md:flex-row">
@@ -368,16 +368,16 @@ def public_portal():
                 {% if entry %}
                 <div class="space-y-4 font-mono text-xs bg-black p-5 border rounded-xl shadow-xl border-matteGold/10">
                     <div class="border-b pb-3 flex justify-between items-center">
-                        <span class="font-bold text-navyDark text-sm">📁 RECORD TRACE: {{ entry.ob_number }}</span>
+                        <span class="font-bold text-mediumblue text-sm">📁 RECORD TRACE: {{ entry.ob_number }}</span>
                         <span class="px-3 py-1 text-[10px] uppercase font-black bg-amber-50 border border-matteGold/40 text-amber-900 rounded-full shadow-sm">
                             {{ entry.status }}
                         </span>
                     </div>
                     <div class="grid grid-cols-2 gap-4">
-                        <p class="text-gray-500">Station Unit: <span class="text-navyDark font-sans font-bold">{{ entry.station.name }}</span></p>
-                        <p class="text-gray-500">Filing Clock: <span class="text-navyDark font-bold">{{ entry.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</span></p>
-                        <p class="text-gray-500">Complainant Group: <span class="text-navyDark font-sans font-bold">{{ entry.complainant_name }}</span></p>
-                        <p class="text-gray-500">Crime Class: <span class="text-navyDark font-sans font-bold">{{ entry.crime_category }}</span></p>
+                        <p class="text-gray-500">Station Unit: <span class="text-mediumblue font-sans font-bold">{{ entry.station.name }}</span></p>
+                        <p class="text-gray-500">Filing Clock: <span class="text-mediumblue font-bold">{{ entry.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</span></p>
+                        <p class="text-gray-500">Complainant Group: <span class="text-mediumblue font-sans font-bold">{{ entry.complainant_name }}</span></p>
+                        <p class="text-gray-500">Crime Class: <span class="text-mediumblue font-sans font-bold">{{ entry.crime_category }}</span></p>
                     </div>
                     <div class="bg-slateblack p-4 rounded-lg font-sans text-gray-700 border italic text-xs leading-relaxed shadow-inner">
                         "{{ entry.narrative[:250] }}..."
@@ -385,11 +385,11 @@ def public_portal():
                     <div class="border-t pt-4 flex justify-between items-center">
                         <div>
                             <span class="block text-[9px] text-gray-400 uppercase font-mono tracking-wider">Assigned Criminal Investigator</span>
-                            <span class="font-sans text-xs font-black text-navyDark">
+                            <span class="font-sans text-xs font-black text-mediumblue">
                                 {% if entry.investigator %} {{ entry.investigator.rank }} {{ entry.investigator.full_name }} {% else %} Internal OCS Desk Review Phase {% endif %}
                             </span>
                         </div>
-                        <a href="/abstract/download/{{ entry.id }}" class="bg-gold-gradient hover:opacity-90 text-navyDark font-black px-5 py-2.5 rounded-lg text-[11px] uppercase tracking-widest shadow-md transition-all duration-200">
+                        <a href="/abstract/download/{{ entry.id }}" class="bg-gold-gradient hover:opacity-90 text-mediumblue font-black px-5 py-2.5 rounded-lg text-[11px] uppercase tracking-widest shadow-md transition-all duration-200">
                             Download Certified Abstract
                         </a>
                     </div>
@@ -479,15 +479,15 @@ def dashboard():
     
     html = """
     <div class="space-y-6 font-sans">
-        <h1 class="text-xl font-black text-navyDark uppercase tracking-widest border-b pb-3 border-matteGold/20 flex justify-between items-center">
+        <h1 class="text-xl font-black text-mediumblue uppercase tracking-widest border-b pb-3 border-matteGold/20 flex justify-between items-center">
             <span>📊 Core Command Operations Metrics Hub</span>
             <span class="text-xs font-mono font-normal text-white bg-luxury-navy px-3 py-1 rounded border border-matteGold/30 shadow-inner">Operational Ready Suite</span>
         </h1>
         
         <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
-            <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-navyDark">
+            <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-mediumblue">
                 <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Total Logs Stack</div>
-                <div class="text-3xl font-black text-navyDark mt-1">{{ total_ob }}</div>
+                <div class="text-3xl font-black text-mediumblue mt-1">{{ total_ob }}</div>
             </div>
             <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-amber-500">
                 <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Officer Reviews</div>
@@ -522,7 +522,7 @@ def dashboard():
         </div>
         
         <div class="bg-black p-6 rounded-xl luxury-card border border-matteGold/15">
-            <h3 class="text-xs font-mono font-black uppercase text-navyDark mb-4 border-b pb-2 flex items-center justify-between">
+            <h3 class="text-xs font-mono font-black uppercase text-mediumblue mb-4 border-b pb-2 flex items-center justify-between">
                 <span>📊 Live Analytics Visualization Streams</span>
                 <span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
             </h3>
@@ -668,10 +668,10 @@ def occurrence_book():
                     <tbody class="divide-y divide-gray-100 font-sans text-gray-700">
                         {% for r in records %}
                         <tr class="hover:bg-gray-50/80 divide-x divide-gray-50 transition-all duration-150">
-                            <td class="p-4 font-mono font-extrabold text-navyDark text-sm tracking-wide">{{ r.ob_number }}</td>
+                            <td class="p-4 font-mono font-extrabold text-mediumblue text-sm tracking-wide">{{ r.ob_number }}</td>
                             <td class="p-4 text-gray-400 font-mono text-[11px]">{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
                             <td class="p-4 font-bold text-gray-900 text-xs">{{ r.complainant_name }}</td>
-                            <td class="p-4"><span class="bg-slateblack text-navyDark px-2.5 py-1 border border-black text-[10px] rounded-md font-mono font-bold">{{ r.crime_category }}</span></td>
+                            <td class="p-4"><span class="bg-slateblack text-mediumblue px-2.5 py-1 border border-black text-[10px] rounded-md font-mono font-bold">{{ r.crime_category }}</span></td>
                             <td class="p-4">
                                 <span class="text-[9px] font-mono font-black uppercase border px-2.5 py-1 rounded-full shadow-sm
                                            {% if r.status == 'Pending Review' %} bg-amber-50 text-amber-800 border-amber-300
@@ -683,7 +683,7 @@ def occurrence_book():
                             </td>
                             <td class="p-4 flex space-x-2 justify-center font-mono">
                                 <a href="/case-workspace/{{ r.id }}" class="bg-luxury-navy text-white border border-matteGold/30 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-securityBlue transition-all">Workspace</a>
-                                <a href="/abstract/download/{{ r.id }}" class="bg-gold-gradient text-navyDark px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider hover:opacity-90 transition-all shadow-sm">PDF Abstract</a>
+                                <a href="/abstract/download/{{ r.id }}" class="bg-gold-gradient text-mediumblue px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider hover:opacity-90 transition-all shadow-sm">PDF Abstract</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -708,7 +708,7 @@ def case_workspace(entry_id):
     html = """
     <div class="space-y-6">
         <div class="border-b pb-3 border-matteGold/20 flex justify-between items-center">
-            <h1 class="text-xl font-black text-navyDark uppercase font-mono tracking-wide flex items-center">
+            <h1 class="text-xl font-black text-mediumblue uppercase font-mono tracking-wide flex items-center">
                 <span>🔍 Case Investigative Shell Terminal: <span class="text-white">{{ entry.ob_number }}</span></span>
             </h1>
             <span class="px-4 py-1.5 bg-luxury-navy border border-matteGold/30 text-white font-mono text-xs font-bold rounded-lg shadow-md">Jurisdiction Hub: {{ entry.station.name }}</span>
@@ -718,10 +718,10 @@ def case_workspace(entry_id):
             <div class="bg-black p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4 font-mono">
                 <h3 class="font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">Primary Core Parameters</h3>
                 <div class="space-y-2.5">
-                    <p class="text-gray-400">Complainant File Identity: <span class="text-navyDark font-sans font-black block text-sm mt-0.5">{{ entry.complainant_name }}</span></p>
-                    <p class="text-gray-400">National ID Token: <span class="text-navyDark font-bold block mt-0.5">{{ entry.national_id }}</span></p>
-                    <p class="text-gray-400">Telephone Line Trace: <span class="text-navyDark font-bold block mt-0.5">{{ entry.phone_number }}</span></p>
-                    <p class="text-gray-400">Physical Location Site: <span class="text-navyDark font-sans font-bold block mt-0.5">{{ entry.incident_location }}</span></p>
+                    <p class="text-gray-400">Complainant File Identity: <span class="text-mediumblue font-sans font-black block text-sm mt-0.5">{{ entry.complainant_name }}</span></p>
+                    <p class="text-gray-400">National ID Token: <span class="text-mediumblue font-bold block mt-0.5">{{ entry.national_id }}</span></p>
+                    <p class="text-gray-400">Telephone Line Trace: <span class="text-mediumblue font-bold block mt-0.5">{{ entry.phone_number }}</span></p>
+                    <p class="text-gray-400">Physical Location Site: <span class="text-mediumblue font-sans font-bold block mt-0.5">{{ entry.incident_location }}</span></p>
                 </div>
                 
                 <div class="bg-slateblack p-4 rounded-xl border text-gray-700 font-sans leading-relaxed italic shadow-inner">
@@ -1124,13 +1124,13 @@ def suspect_registry():
                     <tbody class="divide-y divide-gray-100 font-sans text-gray-700">
                         {% for s in suspects %}
                         <tr class="hover:bg-gray-50/80 divide-x divide-gray-50 transition-all duration-150">
-                            <td class="p-4 font-extrabold text-navyDark text-sm">{{ s.full_name }}</td>
+                            <td class="p-4 font-extrabold text-mediumblue text-sm">{{ s.full_name }}</td>
                             <td class="p-4 font-mono text-[11px] space-y-0.5 text-gray-600">
-                                <span class="block text-navyDark font-semibold">ID: {% if s.national_id %}{{ s.national_id }}{% else %}N/A{% endif %}</span>
+                                <span class="block text-mediumblue font-semibold">ID: {% if s.national_id %}{{ s.national_id }}{% else %}N/A{% endif %}</span>
                                 <span class="block text-[10px]">DOB: {{ s.date_of_birth }} | Gen: {{ s.gender }}</span>
                             </td>
                             <td class="p-4 space-y-0.5 font-medium text-xs">
-                                <span class="block text-navyDark">📍 {{ s.address or 'No Address Tracked' }}</span>
+                                <span class="block text-mediumblue">📍 {{ s.address or 'No Address Tracked' }}</span>
                                 <span class="block text-gray-400 font-mono text-[11px]">📞 {{ s.phone_number or 'N/A' }}</span>
                             </td>
                             <td class="p-4 max-w-xs text-xs italic text-gray-500 font-medium truncate" title="{{ s.arrest_history_summary }}">
@@ -1286,11 +1286,11 @@ def officer_management():
                     <tbody class="divide-y divide-gray-100 font-sans text-gray-700">
                         {% for o in officers %}
                         <tr class="hover:bg-gray-50/80 divide-x divide-gray-50 transition-all duration-150">
-                            <td class="p-4 font-mono font-extrabold text-navyDark text-[11px] tracking-wider">{{ o.service_number }}</td>
+                            <td class="p-4 font-mono font-extrabold text-mediumblue text-[11px] tracking-wider">{{ o.service_number }}</td>
                             <td class="p-4 font-bold text-gray-900 text-xs">{{ o.rank }} {{ o.full_name }}</td>
                             <td class="p-4 font-mono font-black text-[10px] uppercase text-indigo-900 tracking-wide">{{ o.role }}</td>
                             <td class="p-4 font-medium space-y-0.5 text-xs">
-                                <span class="block text-navyDark font-bold">📍 {% if o.station %}{{ o.station.name }}{% else %}Global Command Hub Node{% endif %}</span>
+                                <span class="block text-mediumblue font-bold">📍 {% if o.station %}{{ o.station.name }}{% else %}Global Command Hub Node{% endif %}</span>
                                 <span class="block text-[11px] text-gray-400 font-mono">Dept: {{ o.department or 'General Operations Roster' }}</span>
                             </td>
                             <td class="p-4">
@@ -1406,7 +1406,7 @@ def audit_logs():
     logs = AuditLog.query.order_by(AuditLog.id.desc()).limit(250).all()
     html = """
     <div class="space-y-4">
-        <h1 class="text-xl font-black text-navyDark font-mono uppercase tracking-widest border-b pb-3 border-matteGold/20">
+        <h1 class="text-xl font-black text-mediumblue font-mono uppercase tracking-widest border-b pb-3 border-matteGold/20">
             🛡️ Session Security Ledger Audit Logs
         </h1>
         <div class="bg-black border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
