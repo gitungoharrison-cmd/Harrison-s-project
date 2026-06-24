@@ -310,7 +310,6 @@ def build_pdf_abstract(ob, stream):
     t.setStyle(TableStyle([
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#0B132B')),
         ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#050B14')),
-        ('TEXTCOLOR',(0;0),(0,-1),colorwhite),
         ('PADDING', (0,0), (-1,-1), 6),
         ('VALIGN', (0,0), (-1,-1), 'TOP'),
     ]))
