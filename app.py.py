@@ -353,8 +353,8 @@ class VisitorLog(Base):
     visitor_name = Column(String(100), nullable=False)
     national_id = Column(String(20), nullable=False)
     phone_number = Column(String(20))
-    visitor_relationship = Column(String(50))
-    visit_date = Column(Date, default=date.today)
+    visitor_relationship = Column(String(50),nullable=False)
+    visit_date = Column(Date, default=date.now)
     visit_time = Column(Time, default=lambda: datetime.now().time())
     approved_by = Column(String(100))
 
