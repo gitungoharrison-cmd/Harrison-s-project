@@ -286,7 +286,7 @@ class EmergencyContact(Base):
     id = Column(Integer, primary_key=True)
     prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
     name = Column(String(100), nullable=False)
-    relationship = Column(String(50), nullable=False)
+    relationship_to_prisoner = Column(String(50), nullable=False)
     phone_number = Column(String(20), nullable=False)
 
     prisoner = relationship("Prisoner", back_populates="emergency_contacts")
