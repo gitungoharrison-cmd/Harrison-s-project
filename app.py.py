@@ -1,1543 +1,1205 @@
 import os
-import secrets
-import hashlib
-from datetime import datetime, timezone
-from io import BytesIO
+import io
+import enum
+from datetime import datetime, date, timedelta, time
+from functools import wraps
+import json
 
-from flask import Flask, render_template_string, request, redirect, url_for, flash, send_from_directory, abort, Response
+from flask import Flask, render_template, redirect, url_for, flash, request, abort, send_file, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_wtf import FlaskForm
-from flask_wtf.csrf import CSRFProtect
-from wtforms import StringField, PasswordField, TextAreaField, SelectField
-from wtforms.validators import DataRequired
+from flask_wtf.file import FileField, FileAllowed
+from wtforms import StringField, PasswordField, SubmitField, SelectField, TextAreaField, DateField
+from wtforms.validators import DataRequired, Email, Length, ValidationError
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
-# ReportLab Engine Components
+# FastAPI REST Routing Subsystem Integration
+from fastapi import APIRouter, Depends, HTTPException, status as fastapi_status
+from pydantic import BaseModel
+from typing import List, Optional
+from sqlalchemy import Column, Integer, String, Date, Time, DateTime, Boolean, ForeignKey, Text, Numeric, Enum
+from sqlalchemy.orm import relationship
+
+# ReportLab and QR Code Engine
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
-from reportlab.graphics.shapes import Drawing, Rect, Line, String as DString
-
-# Excel Engine
+import qrcode
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
-# 1. APPLICATION BOOTSTRAP & HARDENING
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'nps_secure_core_system_key_2026')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///dpobcms_luxury_v3.db')
-if app.config['SQLALCHEMY_DATABASE_URI'].startswith("postgres://"):
-    app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace("postgres://", "postgresql://", 1)
-
+app.config['SECRET_KEY'] = '9c91ee0a905a5a1f274a77bc3a9e64e9a039ff0123e4d82b'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///dpobcms.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'nps_evidence_vault')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max limit
+app.config['UPLOAD_FOLDER'] = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 db = SQLAlchemy(app)
-csrf = CSRFProtect(app)
+Base = db.Model  # Map declarative Base directly to Flask-SQLAlchemy wrapper
+
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+login_manager.login_message_category = 'info'
 
-# 2. DATABASE SCHEMATIC & RELATIONSHIP ARCHITECTURE
-ob_suspect_association = db.Table('ob_suspect_association',
-    db.Column('ob_entry_id', db.Integer, db.ForeignKey('ob_entry.id', ondelete='CASCADE'), primary_key=True),
-    db.Column('suspect_id', db.Integer, db.ForeignKey('suspect.id', ondelete='CASCADE'), primary_key=True)
+
+# --- ADVANCED ENUMS FOR CUSTODY & SECURITY ---
+class CellStatus(enum.Enum):
+    AVAILABLE = "Available"
+    OCCUPIED = "Occupied"
+    FULL = "Full"
+    UNDER_MAINTENANCE = "Under Maintenance"
+    CLOSED = "Closed"
+
+class MovementReason(enum.Enum):
+    COURT = "Court Appearance"
+    MEDICAL = "Medical Treatment"
+    INTERVIEW = "Investigation Interview"
+    TRANSFER = "Cell Transfer"
+    RELEASE = "Release"
+
+class MealType(enum.Enum):
+    BREAKFAST = "Breakfast"
+    LUNCH = "Lunch"
+    DINNER = "Dinner"
+
+
+# --- SECURITY UTILITIES & AUDIT HOOK ---
+def log_audit(action, ip_address=None):
+    user_id = current_user.id if current_user.is_authenticated else None
+    station_id = current_user.officer.station_id if (current_user.is_authenticated and current_user.officer) else None
+    if not ip_address:
+        ip_address = request.remote_addr if request else "0.0.0.0"
+    log = AuditLog(
+        user_id=user_id,
+        station_id=station_id,
+        action=action,
+        ip_address=ip_address
+    )
+    db.session.add(log)
+    db.session.commit()
+
+def role_required(roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                return redirect(url_for('login'))
+            if current_user.role not in roles:
+                log_audit(f"ACCESS DENIED: Attempted to access {request.path}")
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+# --- SYSTEM CORE ORM MODELS ---
+
+class Station(Base):
+    __tablename__ = 'stations'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    code = Column(String(10), unique=True, nullable=False)
+    officers = relationship('Officer', backref='station', lazy=True)
+    ob_entries = relationship('OBEntry', backref='station', lazy=True)
+    audit_logs = relationship('AuditLog', backref='station', lazy=True)
+
+class User(Base, UserMixin):
+    __tablename__ = 'users'
+    id = Column(Integer, primary_key=True)
+    email = Column(String(120), unique=True, nullable=False)
+    password_hash = Column(String(128), nullable=False)
+    role = Column(String(50), nullable=False) # 'Administrator', 'OCS', 'Desk Officer', 'Investigator'
+    is_active = Column(Boolean, default=True)
+    officer = relationship('Officer', backref='user', uselist=False, lazy=True)
+    audit_logs = relationship('AuditLog', backref='user', lazy=True)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+class Officer(Base):
+    __tablename__ = 'officers'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    station_id = Column(Integer, ForeignKey('stations.id'), nullable=False)
+    service_number = Column(String(50), unique=True, nullable=False)
+    rank = Column(String(50), nullable=False)
+    full_name = Column(String(100), nullable=False)
+    department = Column(String(100), nullable=False)
+    phone_number = Column(String(20), nullable=False)
+    ob_entries_recorded = relationship('OBEntry', backref='recording_officer', lazy=True)
+    investigations_assigned = relationship('Investigation', backref='investigator', lazy=True)
+
+suspect_cases = db.Table('suspect_cases',
+    Column('suspect_id', Integer, ForeignKey('suspects.id'), primary_key=True),
+    Column('ob_entry_id', Integer, ForeignKey('ob_entries.id'), primary_key=True)
 )
 
-class Station(db.Model):
-    __tablename__ = 'station'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), unique=True, nullable=False)
-    code = db.Column(db.String(20), unique=True, nullable=False)
-    users = db.relationship('User', backref='station', lazy=True)
-    ob_entries = db.relationship('OBEntry', backref='station', lazy=True)
+class OBEntry(Base):
+    __tablename__ = 'ob_entries'
+    id = Column(Integer, primary_key=True)
+    ob_number = Column(String(30), unique=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    station_id = Column(Integer, ForeignKey('stations.id'), nullable=False)
+    complainant_name = Column(String(100), nullable=False)
+    national_id = Column(String(50), nullable=False)
+    phone_number = Column(String(20), nullable=False)
+    gender = Column(String(10), nullable=False)
+    address = Column(Text, nullable=False)
+    incident_location = Column(String(200), nullable=False)
+    crime_category = Column(String(100), nullable=False)
+    suspect_details = Column(Text, nullable=True)
+    narrative_statement = Column(Text, nullable=False)
+    recording_officer_id = Column(Integer, ForeignKey('officers.id'), nullable=False)
+    status = Column(String(50), default='Pending Review')
+    investigation = relationship('Investigation', backref='ob_entry', uselist=False, lazy=True)
+    evidence_files = relationship('Evidence', backref='ob_entry', lazy=True)
+    suspects = relationship('Suspect', secondary=suspect_cases, backref='ob_entries', lazy=True)
 
-class User(db.Model, UserMixin):
-    __tablename__ = 'user'
-    id = db.Column(db.Integer, primary_key=True)
-    service_number = db.Column(db.String(50), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    full_name = db.Column(db.String(100), nullable=False)
-    rank = db.Column(db.String(50), nullable=False)
-    role = db.Column(db.String(40), nullable=False)  # Administrator, OCS, Desk Officer, Investigator
-    department = db.Column(db.String(100), nullable=True)
-    email = db.Column(db.String(120), nullable=True)
-    phone = db.Column(db.String(30), nullable=True)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
-    station_id = db.Column(db.Integer, db.ForeignKey('station.id'), nullable=True)
+class Investigation(Base):
+    __tablename__ = 'investigations'
+    id = Column(Integer, primary_key=True)
+    ob_entry_id = Column(Integer, ForeignKey('ob_entries.id'), unique=True, nullable=False)
+    investigator_id = Column(Integer, ForeignKey('officers.id'), nullable=True)
+    assigned_date = Column(DateTime, default=datetime.utcnow)
+    notes = relationship('InvestigationNote', backref='investigation', lazy=True)
 
-class OBEntry(db.Model):
-    __tablename__ = 'ob_entry'
-    id = db.Column(db.Integer, primary_key=True)
-    ob_number = db.Column(db.String(40), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    complainant_name = db.Column(db.String(120), nullable=False)
-    national_id = db.Column(db.String(50), nullable=False)
-    phone_number = db.Column(db.String(40), nullable=False)
-    gender = db.Column(db.String(20), nullable=False)
-    address = db.Column(db.Text, nullable=False)
-    incident_location = db.Column(db.String(200), nullable=False)
-    crime_category = db.Column(db.String(100), nullable=False)
-    narrative = db.Column(db.Text, nullable=False)
-    status = db.Column(db.String(40), default='Pending Review', nullable=False)
-    
-    station_id = db.Column(db.Integer, db.ForeignKey('station.id'), nullable=False)
-    reporting_officer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    investigator_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
-    
-    reporting_officer = db.relationship('User', foreign_keys=[reporting_officer_id])
-    investigator = db.relationship('User', foreign_keys=[investigator_id])
-    
-    notes = db.relationship('InvestigationNote', backref='ob_entry', lazy=True, cascade="all, delete-orphan")
-    evidence_files = db.relationship('Evidence', backref='ob_entry', lazy=True, cascade="all, delete-orphan")
-    suspects = db.relationship('Suspect', secondary=ob_suspect_association, backref=db.backref('ob_entries', lazy='dynamic'))
+class InvestigationNote(Base):
+    __tablename__ = 'investigation_notes'
+    id = Column(Integer, primary_key=True)
+    investigation_id = Column(Integer, ForeignKey('investigations.id'), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    note_type = Column(String(50), nullable=False)
+    entry_title = Column(String(200), nullable=False)
+    statement_body = Column(Text, nullable=False)
 
-class InvestigationNote(db.Model):
-    __tablename__ = 'investigation_note'
-    id = db.Column(db.Integer, primary_key=True)
-    ob_entry_id = db.Column(db.Integer, db.ForeignKey('ob_entry.id', ondelete='CASCADE'), nullable=False)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    note_type = db.Column(db.String(50), nullable=False)
-    text_content = db.Column(db.Text, nullable=False)
-    recorded_by = db.Column(db.String(100), nullable=False)
+class Suspect(Base):
+    __tablename__ = 'suspects'
+    id = Column(Integer, primary_key=True)
+    full_name = Column(String(100), nullable=False)
+    national_id = Column(String(50), unique=True, nullable=False)
+    date_of_birth = Column(Date, nullable=False)
+    gender = Column(String(10), nullable=False)
+    address = Column(Text, nullable=False)
+    phone_number = Column(String(20), nullable=False)
+    arrest_history = Column(Text, nullable=True)
 
-class Evidence(db.Model):
+class Evidence(Base):
     __tablename__ = 'evidence'
-    id = db.Column(db.Integer, primary_key=True)
-    ob_entry_id = db.Column(db.Integer, db.ForeignKey('ob_entry.id', ondelete='CASCADE'), nullable=False)
-    filename = db.Column(db.String(255), nullable=False)
-    original_name = db.Column(db.String(255), nullable=False)
-    file_type = db.Column(db.String(100), nullable=False)
-    upload_date = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    uploaded_by = db.Column(db.String(100), nullable=False)
+    id = Column(Integer, primary_key=True)
+    ob_entry_id = Column(Integer, ForeignKey('ob_entries.id'), nullable=False)
+    file_name = Column(String(255), nullable=False)
+    file_type = Column(String(100), nullable=False)
+    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    uploader = relationship('User', foreign_keys=[uploaded_by_user_id])
 
-class Suspect(db.Model):
-    __tablename__ = 'suspect'
-    id = db.Column(db.Integer, primary_key=True)
-    full_name = db.Column(db.String(120), nullable=False)
-    national_id = db.Column(db.String(50), unique=True, nullable=True)
-    date_of_birth = db.Column(db.String(30), nullable=True)
-    gender = db.Column(db.String(20), nullable=False)
-    address = db.Column(db.Text, nullable=True)
-    phone_number = db.Column(db.String(50), nullable=True)
-    arrest_history_summary = db.Column(db.Text, nullable=True)
+class AuditLog(Base):
+    __tablename__ = 'audit_logs'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    station_id = Column(Integer, ForeignKey('stations.id'), nullable=True)
+    action = Column(String(255), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    ip_address = Column(String(50), nullable=False)
 
-class AuditLog(db.Model):
-    __tablename__ = 'audit_log'
-    id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    user_identifier = db.Column(db.String(120), nullable=False)
-    action = db.Column(db.String(255), nullable=False)
-    ip_address = db.Column(db.String(50), nullable=False)
+
+# --- CELL INFRASTRUCTURE & ALLOCATION MODELS ---
+class CellBlock(Base):
+    __tablename__ = 'cell_blocks'
+    id = Column(Integer, primary_key=True)
+    block_name = Column(String(50), unique=True, nullable=False)
+    gender_category = Column(String(30), nullable=False)
+    cells = relationship("Cell", back_populates="block")
+
+class Cell(Base):
+    __tablename__ = 'cells'
+    id = Column(Integer, primary_key=True)
+    block_id = Column(Integer, ForeignKey('cell_blocks.id'), nullable=False)
+    cell_number = Column(String(10), nullable=False)
+    capacity = Column(Integer, default=6)
+    current_occupancy = Column(Integer, default=0)
+    status = Column(Enum(CellStatus), default=CellStatus.AVAILABLE)
+
+    block = relationship("CellBlock", back_populates="cells")
+    prisoners = relationship("Prisoner", back_populates="cell")
+    maintenance_records = relationship("CellMaintenance", back_populates="cell")
+
+class CellMaintenance(Base):
+    __tablename__ = 'cell_maintenance'
+    id = Column(Integer, primary_key=True)
+    cell_id = Column(Integer, ForeignKey('cells.id'), nullable=False)
+    issue_description = Column(Text, nullable=False)
+    reported_date = Column(DateTime, default=datetime.utcnow)
+    resolved_date = Column(DateTime, nullable=True)
+    status = Column(String(30), default="Pending")
+
+    cell = relationship("Cell", back_populates="maintenance_records")
+
+
+# --- CORE PRISONER CORE LEDGER ---
+class Prisoner(Base):
+    __tablename__ = 'prisoners'
+    id = Column(Integer, primary_key=True)
+    prisoner_number = Column(String(50), unique=True, nullable=False)
+    full_name = Column(String(100), nullable=False)
+    national_id = Column(String(20), unique=True, nullable=True)
+    dob = Column(Date, nullable=False)
+    gender = Column(String(20), nullable=False)
+    address = Column(Text)
+    phone_number = Column(String(20))
+    nationality = Column(String(50), default="Kenyan")
+    marital_status = Column(String(20))
+    occupation = Column(String(50))
+    
+    arrest_date = Column(Date, default=date.today)
+    arrest_time = Column(Time, default=lambda: datetime.now().time())
+    assigning_officer = Column(String(100), nullable=True)
+    arresting_officer = Column(String(100), nullable=False)
+    ob_number = Column(String(50), nullable=False)
+    case_number = Column(String(50))
+    
+    cell_block_id = Column(Integer, ForeignKey('cell_blocks.id'))
+    cell_id = Column(Integer, ForeignKey('cells.id'))
+    bed_number = Column(String(10))
+    custody_status = Column(String(30), default="In Custody") 
+    risk_classification = Column(String(20), default="Medium") 
+
+    cell = relationship("Cell", back_populates="prisoners")
+    biometrics = relationship("PrisonerBiometric", uselist=False, back_populates="prisoner")
+    property_items = relationship("PrisonerProperty", back_populates="prisoner")
+    medical_assessments = relationship("MedicalAssessment", back_populates="prisoner")
+    meal_logs = relationship("MealLog", back_populates="prisoner")
+    visitor_logs = relationship("VisitorLog", back_populates="prisoner")
+    movements = relationship("PrisonerMovement", back_populates="prisoner")
+    court_productions = relationship("CourtProduction", back_populates="prisoner")
+    release_record = relationship("ReleaseRecord", uselist=False, back_populates="prisoner")
+    emergency_contacts = relationship("EmergencyContact", back_populates="prisoner")
+
+class EmergencyContact(Base):
+    __tablename__ = 'emergency_contacts'
+    id = Column(Integer, primary_key=True)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
+    name = Column(String(100), nullable=False)
+    relationship = Column(String(50), nullable=False)
+    phone_number = Column(String(20), nullable=False)
+
+    prisoner = relationship("Prisoner", back_populates="emergency_contacts")
+
+class PrisonerBiometric(Base):
+    __tablename__ = 'prisoner_biometrics'
+    id = Column(Integer, primary_key=True)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), unique=True, nullable=False)
+    fingerprint_reg_number = Column(String(50), unique=True)
+    biometric_id_number = Column(String(50), unique=True)
+    mugshot_url = Column(String(255))
+    signature_url = Column(String(255))
+    registration_date = Column(DateTime, default=datetime.utcnow)
+    registration_officer = Column(String(100))
+
+    prisoner = relationship("Prisoner", back_populates="biometrics")
+
+class PrisonerProperty(Base):
+    __tablename__ = 'prisoner_property'
+    id = Column(Integer, primary_key=True)
+    property_receipt_number = Column(String(50), unique=True, nullable=False)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
+    description = Column(String(255), nullable=False) 
+    quantity = Column(Integer, default=1)
+    condition = Column(String(100))
+    date_received = Column(DateTime, default=datetime.utcnow)
+    receiving_officer = Column(String(100))
+    return_status = Column(Boolean, default=False)
+    return_date = Column(DateTime, nullable=True)
+
+    prisoner = relationship("Prisoner", back_populates="property_items")
+
+
+# --- HEALTH, MEALS & VISITORS ---
+class MedicalAssessment(Base):
+    __tablename__ = 'medical_assessments'
+    id = Column(Integer, primary_key=True)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
+    initial_assessment = Column(Text)
+    existing_conditions = Column(Text)
+    medications_required = Column(Text)
+    disability_status = Column(String(100))
+    mental_health_assessment = Column(Text)
+    medical_officer_notes = Column(Text)
+    assessment_date = Column(DateTime, default=datetime.utcnow)
+
+    prisoner = relationship("Prisoner", back_populates="medical_assessments")
+
+class MealLog(Base):
+    __tablename__ = 'meal_logs'
+    id = Column(Integer, primary_key=True)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
+    meal_date = Column(Date, default=date.today)
+    meal_type = Column(Enum(MealType), nullable=False)
+    served_by = Column(String(100))
+    welfare_notes = Column(Text)
+
+    prisoner = relationship("Prisoner", back_populates="meal_logs")
+
+class VisitorLog(Base):
+    __tablename__ = 'visitor_logs'
+    id = Column(Integer, primary_key=True)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
+    visitor_name = Column(String(100), nullable=False)
+    national_id = Column(String(20), nullable=False)
+    phone_number = Column(String(20))
+    relationship = Column(String(50))
+    visit_date = Column(Date, default=date.today)
+    visit_time = Column(Time, default=lambda: datetime.now().time())
+    approved_by = Column(String(100))
+
+    prisoner = relationship("Prisoner", back_populates="visitor_logs")
+
+
+# --- LIFECYCLE FLOW LOG TRACKING ---
+class PrisonerMovement(Base):
+    __tablename__ = 'prisoner_movements'
+    id = Column(Integer, primary_key=True)
+    movement_number = Column(String(50), unique=True, nullable=False)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
+    previous_cell = Column(String(50))
+    new_cell = Column(String(50))
+    movement_reason = Column(Enum(MovementReason), nullable=False)
+    movement_date = Column(DateTime, default=datetime.utcnow)
+    authorizing_officer = Column(String(100))
+
+    prisoner = relationship("Prisoner", back_populates="movements")
+
+class CourtProduction(Base):
+    __tablename__ = 'court_productions'
+    id = Column(Integer, primary_key=True)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), nullable=False)
+    court_file_number = Column(String(50), nullable=False)
+    court_name = Column(String(100), nullable=False)
+    court_date = Column(Date, nullable=False)
+    court_time = Column(Time, nullable=False)
+    escort_officer = Column(String(100))
+    transport_details = Column(String(255))
+    court_outcome = Column(Text)
+
+    prisoner = relationship("Prisoner", back_populates="court_productions")
+
+class ReleaseRecord(Base):
+    __tablename__ = 'release_records'
+    id = Column(Integer, primary_key=True)
+    release_number = Column(String(50), unique=True, nullable=False)
+    prisoner_id = Column(Integer, ForeignKey('prisoners.id'), unique=True, nullable=False)
+    release_date = Column(Date, default=date.today)
+    release_time = Column(Time, default=lambda: datetime.now().time())
+    release_reason = Column(String(50), nullable=False)
+    authorizing_officer = Column(String(100))
+    property_returned_status = Column(Boolean, default=False)
+    final_remarks = Column(Text)
+
+    prisoner = relationship("Prisoner", back_populates="release_record")
+
+
+# --- EXTERNAL OPERATIONAL SERVICES MODULES ---
+class PoliceBondBail(Base):
+    __tablename__ = 'bonds_bails'
+    id = Column(Integer, primary_key=True)
+    bond_number = Column(String(50), unique=True, nullable=True)
+    bail_number = Column(String(50), unique=True, nullable=True)
+    prisoner_number = Column(String(50), nullable=False)
+    ob_number = Column(String(50), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    guarantor_name = Column(String(100))
+    guarantor_national_id = Column(String(20))
+    guarantor_phone_number = Column(String(20))
+    approval_officer = Column(String(100))
+    bond_issue_date = Column(DateTime, default=datetime.utcnow)
+    bail_release_date = Column(DateTime, nullable=True)
+    court_date = Column(Date)
+    status = Column(String(30), default="Active")
+
+class MissingPerson(Base):
+    __tablename__ = 'missing_persons'
+    id = Column(Integer, primary_key=True)
+    missing_person_number = Column(String(50), unique=True, nullable=False)
+    full_name = Column(String(100), nullable=False)
+    gender = Column(String(20))
+    age = Column(Integer)
+    national_id = Column(String(20))
+    photograph_url = Column(String(255))
+    last_seen_location = Column(String(255))
+    date_missing = Column(Date, nullable=False)
+    reporting_person = Column(String(100))
+    contact_information = Column(String(100))
+    status = Column(String(30), default="Missing")
+
+class GBVCase(Base):
+    __tablename__ = 'gbv_cases'
+    id = Column(Integer, primary_key=True)
+    case_number = Column(String(50), unique=True, nullable=False)
+    victim_information = Column(Text, nullable=False)  
+    suspect_information = Column(Text)
+    incident_details = Column(Text, nullable=False)
+    risk_assessment = Column(Text)
+    protection_order_status = Column(String(100))
+    referral_information = Column(Text)
+    counseling_notes = Column(Text)
+    restricted_access_flag = Column(Boolean, default=True)
+
+class TrafficCase(Base):
+    __tablename__ = 'traffic_cases'
+    id = Column(Integer, primary_key=True)
+    vehicle_registration_number = Column(String(20), nullable=False)
+    vehicle_owner = Column(String(100))
+    driver_details = Column(Text)
+    driving_licence_number = Column(String(20))
+    insurance_information = Column(String(100))
+    accident_location = Column(String(255))
+    traffic_offence = Column(String(255))
+    investigating_officer = Column(String(100))
+    impound_status = Column(Boolean, default=False)
+    fine_amount = Column(Numeric(10, 2))
+    fine_status = Column(String(30), default="Unpaid")
+
+class ChainOfCustody(Base):
+    __tablename__ = 'chain_of_custody'
+    id = Column(Integer, primary_key=True)
+    evidence_number = Column(String(50), unique=True, nullable=False)
+    collection_date = Column(DateTime, default=datetime.utcnow)
+    collection_officer = Column(String(100), nullable=False)
+    current_custodian = Column(String(100), nullable=False)
+    storage_location = Column(String(100))
+    transfer_history = Column(Text)  
+    court_submission_status = Column(Boolean, default=False)
+
+class ForensicReport(Base):
+    __tablename__ = 'forensics'
+    id = Column(Integer, primary_key=True)
+    report_id = Column(String(50), unique=True, nullable=False)
+    case_number = Column(String(50), nullable=False)
+    ob_number = Column(String(50), nullable=False)
+    suspect_reference = Column(String(50))
+    fingerprint_reports = Column(Text)
+    dna_analysis_reports = Column(Text)
+    ballistic_reports = Column(Text)
+    digital_forensic_reports = Column(Text)
+    laboratory_results = Column(Text)
+
+class NotificationLog(Base):
+    __tablename__ = 'notifications'
+    id = Column(Integer, primary_key=True)
+    recipient_user_id = Column(Integer, nullable=False)
+    message = Column(Text, nullable=False)
+    channel = Column(String(20)) 
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    is_read = Column(Boolean, default=False)
+
+class CommunityReport(Base):
+    __tablename__ = 'community_reports'
+    id = Column(Integer, primary_key=True)
+    report_type = Column(String(50)) 
+    content = Column(Text, nullable=False)
+    logged_date = Column(DateTime, default=datetime.utcnow)
+
+class PatrolLog(Base):
+    __tablename__ = 'patrols'
+    id = Column(Integer, primary_key=True)
+    patrol_unit = Column(String(100), nullable=False)
+    assignment_details = Column(Text)
+    activity_logs = Column(Text)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+class PoliceUnitAssignment(Base):
+    __tablename__ = 'police_units'
+    id = Column(Integer, primary_key=True)
+    officer_name = Column(String(100), nullable=False)
+    service_branch = Column(String(50), nullable=False) 
+    assigned_unit = Column(String(100), nullable=False) 
+
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
-def commit_audit(action):
-    try:
-        ident = f"{current_user.rank} {current_user.full_name} ({current_user.service_number})" if current_user.is_authenticated else "Anonymous/Public Interface"
-        ip = request.remote_addr or "127.0.0.1"
-        db.session.add(AuditLog(user_identifier=ident, action=action, ip_address=ip))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
 
-# 3. INTERACTIVE SYSTEM UI MASTER TOKEN TEMPLATES WITH LUXURY STYLING
-BASE_LAYOUT = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NPS - DPOBCMS Secure Portal</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .text-white {
-            color: #0A192F;
-        }
-        .bg-gold-gradient {
-            background: linear-gradient(135deg, #DFBA73 0%, #C5A059 50%, #9A7B3E 100%);
-        }
-        .bg-luxury-navy {
-            background: linear-gradient(180deg, #050B14 0%, #0B132B 100%);
-        }
-        .luxury-card {
-            background: #D4AF37;
-            box-shadow: 0 10px 30px -5px rgba(5, 11, 20, 0.06), 0 4px 12px -2px rgba(197, 160, 89, 0.1);
-            border: 1px solid rgba(197, 160, 89, 0.15);
-        }
-        .luxury-input:focus {
-            border-color: #C5A059;
-            box-shadow: 0 0 0 3px rgba(197, 160, 89, 0.2);
-        }
-    </style>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        mediumblue: '#050B14',
-                        securityBlue: '#0B132B',
-                        matteGold: '#C5A059',
-                        slateblack: '#050B14'
-                    }
-                }
-            }
-        }
-    </script>
-</head>
-<body class="bg-slateblack text-white min-h-screen flex flex-col font-sans">
-    <nav class="bg-luxury-navy text-white p-5 shadow-2xl flex justify-between items-center border-b-2 border-gold-gradient">
-        <div class="flex items-center space-x-4">
-            <div class="w-10 h-10 bg-gold-gradient rounded-full flex items-center justify-center font-black text-white text-xl shadow-lg border border-black/20">🚨</div>
-            <div>
-                <span class="font-extrabold tracking-widest text-sm block uppercase text-white">NATIONAL POLICE SERVICE — REPUBLC OF KENYA</span>
-                <span class="text-[10px] tracking-widest text-white-400 block font-mono">DIGITAL OCCURRENCE BOOK & CASE COMMAND CORE</span>
-            </div>
-        </div>
-        {% if current_user.is_authenticated %}
-        <div class="flex items-center space-x-4 text-xs font-mono">
-            <div class="bg-securityBlue border border-matteGold/30 px-4 py-2 rounded shadow-inner">
-                <span class="text-white font-bold text-sm">{{ current_user.rank }} {{ current_user.full_name }}</span> 
-                <span class="text-gray-400">[{{ current_user.role }}]</span>
-                {% if current_user.station %}
-                <span class="text-amber-400 font-sans font-bold block text-right text-[10px] uppercase mt-0.5">📍 Hub: {{ current_user.station.name }}</span>
-                {% endif %}
-            </div>
-            <a href="/logout" class="bg-gradient-to-r from-red-800 to-red-950 hover:from-red-900 hover:to-black transition-all text-white border border-red-700 px-4 py-2.5 rounded font-bold uppercase shadow-lg">Logout</a>
-        </div>
-        {% else %}
-        <a href="/public-portal" class="bg-transparent text-white border border-matteGold text-xs font-bold px-4 py-2.5 rounded uppercase tracking-widest hover:bg-gold-gradient hover:text-mediumblue transition-all duration-300 shadow-md">Public Portal Interface</a>
-        {% endif %}
-    </nav>
-    <div class="flex flex-1 flex-col md:flex-row">
-        {% if current_user.is_authenticated %}
-        <div class="w-full md:w-64 bg-luxury-navy text-white p-5 space-y-4 border-r border-matteGold/10 flex flex-col justify-between shadow-2xl">
-            <div class="space-y-2">
-                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 mb-3 font-mono border-b border-matteGold/20 pb-1">Operations Command</div>
-                <a href="/dashboard" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📊 Operations Dashboard</a>
-                <a href="/occurrence-book" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📖 Occurrence Book (OB)</a>
-                <a href="/suspect-registry" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👥 Suspect Intelligence Registry</a>
-                
-                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Intelligence & Reports</div>
-                <a href="/reports" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">📈 Statistical Analytics Hub</a>
-                
-                {% if current_user.role in ['Administrator', 'OCS'] %}
-                <div class="text-[10px] uppercase font-black text-white tracking-widest px-2 pt-4 mb-3 font-mono border-b border-matteGold/20 pb-1">Administration Control</div>
-                <a href="/officer-management" class="block p-3 rounded text-xs uppercase font-bold tracking-wider hover:bg-securityBlue hover:text-white transition-all duration-200 border-l-4 border-transparent hover:border-matteGold">👮 Command Force Roster</a>
-                {% endif %}
-                {% if current_user.role == 'Administrator' %}
-                <a href="/audit-logs" class="block p-3 rounded text-xs font-mono text-gray-400 hover:bg-securityBlue hover:text-red-400 transition-all border-l-4 border-transparent hover:border-red-500">🛡️ Security Logs</a>
-                {% endif %}
-            </div>
-            <div class="pt-6 border-t border-matteGold/10 text-center text-[10px] text-gray-500 font-mono tracking-wider">
-                DPOBCMS v3.0.26<br>Secure Crypt Ledger Stack
-            </div>
-        </div>
-        {% endif %}
-        <div class="flex-1 p-6 md:p-10 overflow-x-hidden">
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, msg in messages %}
-                        <div class="mb-6 p-4 text-xs font-bold rounded border shadow-xl font-mono {% if category == 'danger' %} bg-red-50 text-red-900 border-red-300 {% else %} bg-emerald-50 text-emerald-900 border-emerald-300 {% endif %}">
-                            ⚡ STATUS NOTIFICATION: {{ msg }}
-                        </div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-            __RENDER_SLOT__
-        </div>
-    </div>
-</body>
-</html>
-"""
+# --- FORMS FRAMEWORK ---
 
-def generate_nps_response(inner_html, **kwargs):
-    return render_template_string(BASE_LAYOUT.replace('__RENDER_SLOT__', inner_html), **kwargs)
+class LoginForm(FlaskForm):
+    email = StringField('Service Email', validators=[DataRequired(), Email()])
+    password = PasswordField('Password', validators=[DataRequired()])
+    submit = SubmitField('Authenticate')
 
-# 4. REPORTLAB PROFESSIONAL VECTOR ENGINEERING ENGINE
-def build_pdf_abstract(ob, stream):
-    doc = SimpleDocTemplate(stream, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
-    styles = getSampleStyleSheet()
-    story = []
-    
-    header_style = ParagraphStyle('H1', fontName='Helvetica-Bold', fontSize=14, leading=16, textColor=colors.HexColor('#050B14'), alignment=1)
-    sub_style = ParagraphStyle('H2', fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=colors.HexColor('#0B132B'), alignment=1)
-    body_style = ParagraphStyle('B1', fontName='Helvetica', fontSize=10, leading=13, textColor=colors.HexColor('#050B14'))
-    label_style = ParagraphStyle('L1', fontName='Helvetica-Bold', fontSize=10, leading=13, textColor=colors.HexColor('#0B132B'))
-    
-    story.append(Paragraph("NATIONAL POLICE SERVICE — REPUBLIC OF KENYA", header_style))
-    story.append(Spacer(1, 4))
-    story.append(Paragraph(f"OFFICIAL DIGITAL OB ABSTRACT RECORD — JURISDICTION: {ob.station.name.upper()}", sub_style))
-    story.append(Spacer(1, 15))
-    
-    qr_data_string = f"NPS-VERIFY:{ob.ob_number}:{ob.national_id}:{hashlib.sha256(ob.ob_number.encode()).hexdigest()[:10].upper()}"
-    d = Drawing(540, 55)
-    d.add(Rect(0, 0, 540, 55, fillColor=colors.HexColor('#F4F5F7'), strokeColor=colors.HexColor('#C5A059'), strokeWidth=1.5))
-    d.add(Rect(10, 7, 40, 40, fillColor=colors.HexColor('#050B14'), strokeColor=None))
-    for i in range(4):
-        for j in range(4):
-            if (i+j) % 2 == 0:
-                d.add(Rect(14 + (i*8), 11 + (j*8), 6, 6, fillColor=colors.black, strokeColor=None))
-    d.add(DString(65, 32, "SECURITY ABSTRACT CRYPTOGRAPHIC VALIDATION BLOCK", fontName="Helvetica-Bold", fontSize=9, fillColor=colors.HexColor('#050B14')))
-    d.add(DString(65, 16, f"TOKEN TRACE: {qr_data_string[:65]}...", fontName="Helvetica-Bold", fontSize=7, fillColor=colors.HexColor('#0B132B')))
-    story.append(d)
-    story.append(Spacer(1, 15))
-    
-    table_data = [
-        [Paragraph("Occurrence Reference Key:", label_style), Paragraph(ob.ob_number, body_style)],
-        [Paragraph("Filing Timestamp:", label_style), Paragraph(ob.created_at.strftime('%Y-%m-%d %H:%M:%S UTC'), body_style)],
-        [Paragraph("Command Station Center:", label_style), Paragraph(ob.station.name, body_style)],
-        [Paragraph("Complainant Legal Name:", label_style), Paragraph(ob.complainant_name, body_style)],
-        [Paragraph("National ID Number:", label_style), Paragraph(ob.national_id, body_style)],
-        [Paragraph("Telephone Demographics:", label_style), Paragraph(ob.phone_number, body_style)],
-        [Paragraph("Gender Profile:", label_style), Paragraph(ob.gender, body_style)],
-        [Paragraph("Residential Address:", label_style), Paragraph(ob.address, body_style)],
-        [Paragraph("Incident Location Geo:", label_style), Paragraph(ob.incident_location, body_style)],
-        [Paragraph("Statutory Crime Category:", label_style), Paragraph(ob.crime_category, body_style)],
-        [Paragraph("Certified Legal Narrative:", label_style), Paragraph(ob.narrative, body_style)],
-        [Paragraph("Workflow System Status:", label_style), Paragraph(ob.status.upper(), ParagraphStyle('ST', fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#C5A059')))],
-        [Paragraph("Recording Force Officer:", label_style), Paragraph(f"{ob.reporting_officer.rank} {ob.reporting_officer.full_name} ({ob.reporting_officer.service_number})", body_style)]
-    ]
-    
-    t = Table(table_data, colWidths=[160, 380])
-    t.setStyle(TableStyle([
-        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#0B132B')),
-        ('BACKGROUND', (0,0), (0,-1), colors.HexColor('#050B14')),
-        ('PADDING', (0,0), (-1,-1), 6),
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 40))
-    
-    sig_drawing = Drawing(540, 60)
-    sig_drawing.add(Line(0, 35, 200, 35, strokeColor=colors.HexColor('#050B14'), strokeWidth=1))
-    sig_drawing.add(DString(0, 20, "OFFICER COMMANDING STATION (OCS)", fontName="Helvetica-Bold", fontSize=8, fillColor=colors.HexColor('#0B132B')))
-    sig_drawing.add(DString(0, 5, "SIGNATURE / FORCE STAMP FIELD", fontName="Helvetica", fontSize=7, fillColor=colors.gray))
-    
-    sig_drawing.add(Line(340, 35, 540, 35, strokeColor=colors.HexColor('#050B14'), strokeWidth=1))
-    sig_drawing.add(DString(340, 20, "COMPLAINANT / ISSUING DESK AGENT", fontName="Helvetica-Bold", fontSize=8, fillColor=colors.HexColor('#0B132B')))
-    sig_drawing.add(DString(340, 5, "LEGAL ACKNOWLEDGEMENT INK STAMP", fontName="Helvetica", fontSize=7, fillColor=colors.gray))
-    story.append(sig_drawing)
-    
-    doc.build(story)
+class OBEntryForm(FlaskForm):
+    complainant_name = StringField('Complainant Full Name', validators=[DataRequired()])
+    national_id = StringField('National ID / Passport Number', validators=[DataRequired()])
+    phone_number = StringField('Phone Number', validators=[DataRequired()])
+    gender = SelectField('Gender', choices=[('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')], validators=[DataRequired()])
+    address = TextAreaField('Residential Address', validators=[DataRequired()])
+    incident_location = StringField('Exact Incident Location', validators=[DataRequired()])
+    crime_category = SelectField('Crime Classification', choices=[
+        ('Robbery', 'Robbery'), ('Assault', 'Assault'), ('Theft', 'Theft'),
+        ('Homicide', 'Homicide'), ('Fraud', 'Fraud'), ('Cybercrime', 'Cybercrime'),
+        ('Domestic Violence', 'Domestic Violence'), ('Other', 'Other Authorized Offense')
+    ], validators=[DataRequired()])
+    suspect_details = TextAreaField('Suspect Physical Description & Details')
+    narrative_statement = TextAreaField('Detailed Narrative Statement', validators=[DataRequired()])
+    submit = SubmitField('Log Occurrence Entry')
 
-# 5. CORE ROUTING & LOGICAL IMPLEMENTATION ENGINE
+class AssignInvestigatorForm(FlaskForm):
+    investigator_id = SelectField('Assign Investigation Officer', coerce=int, validators=[DataRequired()])
+    submit = SubmitField('Commit Assignment')
+
+class InvestigationNoteForm(FlaskForm):
+    note_type = SelectField('Log Entry Classification', choices=[
+        ('Timeline', 'Timeline Milestones'),
+        ('Witness Statement', 'Official Witness Statement'),
+        ('Arrest Record', 'Arrest Processing Record'),
+        ('General', 'General Investigation Journal Entry')
+    ], validators=[DataRequired()])
+    entry_title = StringField('Entry Title / Activity Name', validators=[DataRequired()])
+    statement_body = TextAreaField('Detailed Entry Content / Deposition', validators=[DataRequired()])
+    case_status = SelectField('Update Case Operational Status', choices=[
+        ('Under Investigation', 'Under Investigation'),
+        ('Arrest Made', 'Arrest Made'),
+        ('Court Process', 'Case Forwarded to Court Process'),
+        ('Closed', 'Close Case / Authorize Archive')
+    ], validators=[DataRequired()])
+    submit = SubmitField('Append Case Record')
+
+class EvidenceUploadForm(FlaskForm):
+    evidence_file = FileField('Select Digital Evidence File', validators=[
+        DataRequired(),
+        FileAllowed(['jpg', 'jpeg', 'png', 'mp4', 'pdf', 'docx'], 'Authorized Digital Formats Only.')
+    ])
+    submit = SubmitField('Upload Asset')
+
+class SuspectForm(FlaskForm):
+    full_name = StringField('Suspect Full Name', validators=[DataRequired()])
+    national_id = StringField('National ID Number', validators=[DataRequired()])
+    date_of_birth = DateField('Date of Birth', format='%Y-%m-%d', validators=[DataRequired()])
+    gender = SelectField('Gender', choices=[('Male', 'Male'), ('Female', 'Female')], validators=[DataRequired()])
+    address = TextAreaField('Last Known Address', validators=[DataRequired()])
+    phone_number = StringField('Contact Phone Number', validators=[DataRequired()])
+    arrest_history = TextAreaField('Known Prior Criminal Record / Arrest History')
+    submit = SubmitField('Register Suspect Profile')
+
+class OfficerForm(FlaskForm):
+    email = StringField('Service Email Address', validators=[DataRequired(), Email()])
+    password = PasswordField('System Security Access Password', validators=[DataRequired(), Length(min=8)])
+    role = SelectField('System Operational Access Role', choices=[
+        ('Desk Officer', 'Desk Officer'),
+        ('Investigator', 'Investigation Officer'),
+        ('OCS', 'Officer Commanding Station (OCS)'),
+        ('Administrator', 'System Architect / Administrator')
+    ], validators=[DataRequired()])
+    station_id = SelectField('Assigned Base Police Station', coerce=int, validators=[DataRequired()])
+    service_number = StringField('Official Police Service Number', validators=[DataRequired()])
+    rank = SelectField('Official Rank Mandate', choices=[
+        ('Constable', 'Police Constable'), ('Corporal', 'Police Corporal'),
+        ('Sergeant', 'Police Sergeant'), ('Inspector', 'Inspector of Police'),
+        ('Chief Inspector', 'Chief Inspector (OCS)'), ('Superintendent', 'Superintendent')
+    ], validators=[DataRequired()])
+    full_name = StringField('Officer Legal Full Name', validators=[DataRequired()])
+    department = StringField('Assigned Division / Bureau', validators=[DataRequired()])
+    phone_number = StringField('Official Communications Mobile', validators=[DataRequired()])
+    submit = SubmitField('Commission Officer Profile')
+
+
+# --- APPLICATION ROUTING SYSTEM ---
+
 @app.route('/')
-def index():
+def home():
     return redirect(url_for('public_portal'))
 
 @app.route('/public-portal', methods=['GET', 'POST'])
 def public_portal():
-    entry = None
-    searched = False
-    if request.method == 'POST':
-        ob_num = request.form.get('ob_number', '').strip().upper()
-        entry = OBEntry.query.filter_by(ob_number=ob_num).first()
-        searched = True
-        commit_audit(f"Public terminal lookup execution matching token: {ob_num}")
-        
-    html = """
-    <div class="max-w-2xl mx-auto bg-black rounded-xl shadow-2xl overflow-hidden mt-6 border border-matteGold/20">
-        <div class="bg-luxury-navy p-6 text-white text-center font-bold text-sm uppercase tracking-widest border-b-2 border-gold-gradient text-white">
-            Public Citizen Case Status Verification Portal
-        </div>
-        <div class="p-6 bg-gray-50 border-b">
-            <form method="POST" class="space-y-4">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div>
-                    <label class="block text-[10px] font-mono uppercase font-black text-gray-500 mb-1 tracking-wider">Enter Occurrence Book Number (OB String)</label>
-                    <div class="flex space-x-2">
-                        <input type="text" name="ob_number" placeholder="e.g., OB/2026/000001" required 
-                               class="flex-1 p-3.5 border font-mono text-sm rounded-lg uppercase outline-none luxury-input transition-all duration-200">
-                        <button type="submit" class="bg-luxury-navy hover:bg-securityBlue border border-matteGold/30 text-white font-extrabold px-6 py-3.5 rounded-lg text-xs uppercase tracking-widest transition-all duration-300 shadow-lg">
-                            Verify File Status
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </div>
-        <div class="p-6">
-            {% if searched %}
-                {% if entry %}
-                <div class="space-y-4 font-mono text-xs bg-black p-5 border rounded-xl shadow-xl border-matteGold/10">
-                    <div class="border-b pb-3 flex justify-between items-center">
-                        <span class="font-bold text-mediumblue text-sm">📁 RECORD TRACE: {{ entry.ob_number }}</span>
-                        <span class="px-3 py-1 text-[10px] uppercase font-black bg-amber-50 border border-matteGold/40 text-amber-900 rounded-full shadow-sm">
-                            {{ entry.status }}
-                        </span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <p class="text-gray-500">Station Unit: <span class="text-mediumblue font-sans font-bold">{{ entry.station.name }}</span></p>
-                        <p class="text-gray-500">Filing Clock: <span class="text-mediumblue font-bold">{{ entry.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</span></p>
-                        <p class="text-gray-500">Complainant Group: <span class="text-mediumblue font-sans font-bold">{{ entry.complainant_name }}</span></p>
-                        <p class="text-gray-500">Crime Class: <span class="text-mediumblue font-sans font-bold">{{ entry.crime_category }}</span></p>
-                    </div>
-                    <div class="bg-slateblack p-4 rounded-lg font-sans text-gray-700 border italic text-xs leading-relaxed shadow-inner">
-                        "{{ entry.narrative[:250] }}..."
-                    </div>
-                    <div class="border-t pt-4 flex justify-between items-center">
-                        <div>
-                            <span class="block text-[9px] text-gray-400 uppercase font-mono tracking-wider">Assigned Criminal Investigator</span>
-                            <span class="font-sans text-xs font-black text-mediumblue">
-                                {% if entry.investigator %} {{ entry.investigator.rank }} {{ entry.investigator.full_name }} {% else %} Internal OCS Desk Review Phase {% endif %}
-                            </span>
-                        </div>
-                        <a href="/abstract/download/{{ entry.id }}" class="bg-gold-gradient hover:opacity-90 text-mediumblue font-black px-5 py-2.5 rounded-lg text-[11px] uppercase tracking-widest shadow-md transition-all duration-200">
-                            Download Certified Abstract
-                        </a>
-                    </div>
-                </div>
-                {% else %}
-                <div class="p-4 bg-red-50 text-red-900 border border-red-200 rounded-lg font-mono text-xs font-black text-center shadow-md">
-                    ⚠️ RECORD SEARCH NEGATIVE: No database record matched that specific verification query string inside the cloud ledger stack.
-                </div>
-                {% endif %}
-            {% else %}
-            <div class="text-center py-8 text-gray-400 text-xs italic font-mono tracking-wide">
-                Input an active operational trace key identifier above to pull verified law enforcement milestone telemetry.
-            </div>
-            {% endif %}
-        </div>
-    </div>
-    <div class="text-center mt-8">
-        <a href="/login" class="text-xs font-black uppercase text-securityBlue hover:text-white border-b border-dashed border-matteGold pb-0.5 tracking-widest font-mono transition-all duration-200">
-            &rarr; Terminal Command Frame Login Portal &larr;
-        </a>
-    </div>
-    """
-    return generate_nps_response(html, entry=entry, searched=searched)
+    search_result = None
+    ob_num = request.args.get('ob_number')
+    if ob_num:
+        search_result = OBEntry.query.filter_by(ob_number=ob_num.strip()).first()
+        log_audit(f"PUBLIC QUERY: Searched OB Number {ob_num}")
+    return render_template('public_portal.html', result=search_result, ob_number=ob_num)
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        svc = request.form.get('service_number', '').strip()
-        pwd = request.form.get('password', '')
-        user = User.query.filter_by(service_number=svc, is_active=True).first()
-        if user and check_password_hash(user.password_hash, pwd):
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user and user.is_active and user.check_password(form.password.data):
             login_user(user)
-            commit_audit("User command session successfully authorized via security terminal keys.")
-            return redirect(url_for('dashboard'))
-        flash("Authorization denied. Invalid security payload matrix signatures.", "danger")
-        commit_audit(f"Failed terminal authorization trace flagged tracking token input: {svc}")
-    
-    html = """
-    <div class="max-w-md mx-auto bg-black rounded-xl shadow-2xl overflow-hidden mt-12 border border-matteGold/20">
-        <div class="bg-luxury-navy text-white p-6 text-center font-bold text-sm uppercase tracking-widest border-b-2 border-gold-gradient text-white">
-            Infrastructure Gateway Authorization
-        </div>
-        <form method="POST" class="p-6 space-y-4 bg-black">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div>
-                <label class="block text-[10px] font-mono font-black uppercase tracking-wider text-gray-500 mb-1">Force Service Number</label>
-                <input type="text" name="service_number" required class="w-full p-3.5 font-mono text-xs border rounded-lg bg-black outline-none luxury-input uppercase tracking-wider transition-all duration-200">
-            </div>
-            <div>
-                <label class="block text-[10px] font-mono font-black uppercase tracking-wider text-gray-500 mb-1">Command Passcode Cipher</label>
-                <input type="password" name="password" required class="w-full p-3.5 text-xs border rounded-lg bg-black outline-none luxury-input transition-all duration-200">
-            </div>
-            <button type="submit" class="w-full bg-luxury-navy hover:bg-securityBlue text-white font-black p-4 rounded-lg text-xs uppercase tracking-widest border border-matteGold/30 shadow-xl transition-all duration-300 mt-2">
-                Validate Authorization Key
-            </button>
-        </form>
-    </div>
-    """
-    return generate_nps_response(html)
+            log_audit("AUTH SUCCESS: User Session Established")
+            next_page = request.args.get('next')
+            return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+        else:
+            log_audit(f"AUTH FAILED: Attempt on account {form.email.data}")
+            flash('Invalid official authorization metrics or deactivated account credentials.', 'danger')
+    return render_template('login.html', form=form)
 
 @app.route('/logout')
 @login_required
 def logout():
-    commit_audit("Command node session securely dropped and purged.")
+    log_audit("AUTH LOGOUT: Session Explicitly Destroyed")
     logout_user()
     return redirect(url_for('login'))
 
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    st_id = current_user.officer.station_id
     if current_user.role == 'Administrator':
-        ob_q = OBEntry.query
-        off_count = User.query.count()
+        ob_query = OBEntry.query
+        inv_query = Investigation.query
+        off_query = Officer.query
+        ev_query = Evidence.query
     else:
-        ob_q = OBEntry.query.filter_by(station_id=current_user.station_id)
-        off_count = User.query.filter_by(station_id=current_user.station_id).count()
-        
-    total_ob = ob_q.count()
-    pending = ob_q.filter_by(status='Pending Review').count()
-    ui = ob_q.filter_by(status='Under Investigation').count()
-    arrests = ob_q.filter_by(status='Arrest Made').count()
-    closed = ob_q.filter_by(status='Closed').count()
-    
-    evidence_count = db.session.query(db.func.count(Evidence.id)).join(OBEntry).filter(
-        OBEntry.id == Evidence.ob_entry_id if current_user.role == 'Administrator' else (OBEntry.station_id == current_user.station_id)
-    ).scalar() or 0
-    
-    html = """
-    <div class="space-y-6 font-sans">
-        <h1 class="text-xl font-black text-mediumblue uppercase tracking-widest border-b pb-3 border-matteGold/20 flex justify-between items-center">
-            <span>📊 Core Command Operations Metrics Hub</span>
-            <span class="text-xs font-mono font-normal text-white bg-luxury-navy px-3 py-1 rounded border border-matteGold/30 shadow-inner">Operational Ready Suite</span>
-        </h1>
-        
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-5">
-            <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-mediumblue">
-                <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Total Logs Stack</div>
-                <div class="text-3xl font-black text-mediumblue mt-1">{{ total_ob }}</div>
-            </div>
-            <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-amber-500">
-                <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Officer Reviews</div>
-                <div class="text-3xl font-black text-amber-600 mt-1">{{ pending }}</div>
-            </div>
-            <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-blue-500">
-                <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Active Investigations</div>
-                <div class="text-3xl font-black text-white-600 mt-1">{{ ui }}</div>
-            </div>
-            <div class="bg-black p-5 rounded-xl border border-matteGold/10 luxury-card border-l-4 border-l-emerald-500">
-                <div class="text-[10px] uppercase font-mono font-black text-gray-400 tracking-wider">Closed Records</div>
-                <div class="text-3xl font-black text-emerald-600 mt-1">{{ closed }}</div>
-            </div>
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">
-            <div class="bg-black p-5 rounded-xl luxury-card text-center border border-matteGold/15">
-                <div class="text-[10px] uppercase font-mono font-black text-white tracking-widest mb-1">Apprehensions</div>
-                <div class="text-4xl font-black text-indigo-950">{{ arrests }}</div>
-                <p class="text-[10px] text-gray-400 font-mono mt-1">Validated local lockup tracks</p>
-            </div>
-            <div class="bg-black p-5 rounded-xl luxury-card text-center border border-matteGold/15">
-                <div class="text-[10px] uppercase font-mono font-black text-white tracking-widest mb-1">Station Officers Force</div>
-                <div class="text-4xl font-black text-teal-950">{{ off_count }}</div>
-                <p class="text-[10px] text-gray-400 font-mono mt-1">Active system framework nodes</p>
-            </div>
-            <div class="bg-black p-5 rounded-xl luxury-card text-center border border-matteGold/15">
-                <div class="text-[10px] uppercase font-mono font-black text-white tracking-widest mb-1">Vault Evidence files</div>
-                <div class="text-4xl font-black text-rose-950">{{ evidence_count }}</div>
-                <p class="text-[10px] text-gray-400 font-mono mt-1">Binary crypto blocks committed</p>
-            </div>
-        </div>
-        
-        <div class="bg-black p-6 rounded-xl luxury-card border border-matteGold/15">
-            <h3 class="text-xs font-mono font-black uppercase text-mediumblue mb-4 border-b pb-2 flex items-center justify-between">
-                <span>📊 Live Analytics Visualization Streams</span>
-                <span class="w-2 h-2 bg-emerald-500 rounded-full animate-ping"></span>
-            </h3>
-            <div class="h-48 flex items-center justify-center bg-luxury-navy rounded-xl p-6 border border-matteGold/20 shadow-inner">
-                <div class="w-full max-w-lg px-6 text-center space-y-3">
-                    <p class="font-mono font-black text-white tracking-widest text-[11px]">REAL-TIME DATA-STREAM GRAPH MATRIX CAPTURED</p>
-                    <div class="w-full bg-securityBlue border border-matteGold/20 h-4 rounded-full overflow-hidden flex p-0.5 shadow-lg">
-                        <div class="bg-gold-gradient h-full rounded-l-full" style="width: 40%"></div>
-                        <div class="bg-blue-500 h-full" style="width: 30%"></div>
-                        <div class="bg-amber-500 h-full" style="width: 20%"></div>
-                        <div class="bg-emerald-600 h-full rounded-r-full" style="width: 10%"></div>
-                    </div>
-                    <div class="flex justify-between text-[9px] font-mono text-gray-400 tracking-wide pt-1">
-                        <span>Pending (40%)</span>
-                        <span>Investigating (30%)</span>
-                        <span>Arrests (20%)</span>
-                        <span>Closed (10%)</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    """
-    return generate_nps_response(html, total_ob=total_ob, pending=pending, ui=ui, closed=closed, arrests=arrests, off_count=off_count, evidence_count=evidence_count)
+        ob_query = OBEntry.query.filter_by(station_id=st_id)
+        inv_query = Investigation.query.join(OBEntry).filter(OBEntry.station_id == st_id)
+        off_query = Officer.query.filter_by(station_id=st_id)
+        ev_query = Evidence.query.join(OBEntry).filter(OBEntry.station_id == st_id)
 
-@app.route('/occurrence-book', methods=['GET', 'POST'])
+    stats = {
+        'total_ob': ob_query.count(),
+        'open_cases': ob_query.filter(OBEntry.status.in_(['Pending Review', 'Under Investigation'])).count(),
+        'closed_cases': ob_query.filter_by(status='Closed').count(),
+        'under_inv': ob_query.filter_by(status='Under Investigation').count(),
+        'arrests_made': ob_query.filter_by(status='Arrest Made').count(),
+        'total_officers': off_query.count(),
+        'total_evidence': ev_query.count()
+    }
+
+    categories = ['Robbery', 'Assault', 'Theft', 'Homicide', 'Fraud', 'Cybercrime', 'Domestic Violence', 'Other']
+    cat_counts = [ob_query.filter_by(crime_category=cat).count() for cat in categories]
+    
+    statuses = ['Pending Review', 'Under Investigation', 'Arrest Made', 'Court Process', 'Closed']
+    status_counts = [ob_query.filter_by(status=st).count() for st in statuses]
+
+    months_labels = []
+    months_counts = []
+    for i in range(5, -1, -1):
+        target_date = datetime.utcnow() - timedelta(days=i*30)
+        months_labels.append(target_date.strftime('%B %Y'))
+        m_start = datetime(target_date.year, target_date.month, 1)
+        if target_date.month == 12:
+            m_end = datetime(target_date.year + 1, 1, 1)
+        else:
+            m_end = datetime(target_date.year, target_date.month + 1, 1)
+        months_counts.append(ob_query.filter(OBEntry.created_at >= m_start, OBEntry.created_at < m_end).count())
+
+    chart_data = {
+        'cat_labels': categories, 'cat_values': cat_counts,
+        'status_labels': statuses, 'status_values': status_counts,
+        'trend_labels': months_labels, 'trend_values': months_counts
+    }
+
+    return render_template('dashboard.html', stats=stats, chart_data=json.dumps(chart_data))
+
+@app.route('/ob')
 @login_required
-def occurrence_book():
-    if request.method == 'POST':
-        if current_user.role not in ['Desk Officer', 'Administrator']:
-            abort(403)
-            
-        count = db.session.query(db.func.count(OBEntry.id)).scalar() or 0
-        ob_seq_string = f"OB/2026/{count + 1:06d}"
+def ob_list():
+    st_id = current_user.officer.station_id
+    search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', '').strip()
+    
+    query = OBEntry.query if current_user.role == 'Administrator' else OBEntry.query.filter_by(station_id=st_id)
+    
+    if search:
+        query = query.filter((OBEntry.ob_number.ilike(f"%{search}%")) | (OBEntry.complainant_name.ilike(f"%{search}%")) | (OBEntry.national_id.ilike(f"%{search}%")))
+    if status_filter:
+        query = query.filter_by(status=status_filter)
         
+    entries = query.order_by(OBEntry.created_at.desc()).all()
+    return render_template('ob_list.html', entries=entries)
+
+@app.route('/ob/new', methods=['GET', 'POST'])
+@login_required
+@role_required(['Administrator', 'OCS', 'Desk Officer'])
+def ob_create():
+    form = OBEntryForm()
+    if form.validate_on_submit():
+        st = current_user.officer.station
+        current_year = datetime.utcnow().year
+        
+        base_count = OBEntry.query.filter(OBEntry.ob_number.like(f"OB/{current_year}/%")).count()
+        next_sequence = str(base_count + 1).zfill(6)
+        ob_number_string = f"OB/{current_year}/{next_sequence}"
+
         entry = OBEntry(
-            ob_number=ob_seq_string,
-            complainant_name=request.form.get('complainant_name'),
-            national_id=request.form.get('national_id'),
-            phone_number=request.form.get('phone_number'),
-            gender=request.form.get('gender'),
-            address=request.form.get('address'),
-            incident_location=request.form.get('incident_location'),
-            crime_category=request.form.get('crime_category'),
-            narrative=request.form.get('narrative'),
-            station_id=current_user.station_id,
-            reporting_officer_id=current_user.id,
+            ob_number=ob_number_string,
+            station_id=st.id,
+            complainant_name=form.complainant_name.data,
+            national_id=form.national_id.data,
+            phone_number=form.phone_number.data,
+            gender=form.gender.data,
+            address=form.address.data,
+            incident_location=form.incident_location.data,
+            crime_category=form.crime_category.data,
+            suspect_details=form.suspect_details.data,
+            narrative_statement=form.narrative_statement.data,
+            recording_officer_id=current_user.officer.id,
             status='Pending Review'
         )
         db.session.add(entry)
+        db.session.flush()
+
+        investigation = Investigation(ob_entry_id=entry.id)
+        db.session.add(investigation)
         db.session.commit()
+
+        log_audit(f"OB REGISTERED: Generated Record {entry.ob_number}")
+        flash(f"Occurrence Entry Serialized Successfully: {entry.ob_number}", 'success')
+        return redirect(url_for('ob_list'))
+    return render_template('ob_form.html', form=form, title="Create New OB Entry")
+
+@app.route('/ob/<int:entry_id>')
+@login_required
+def ob_detail(entry_id):
+    entry = db.session.get(OBEntry, entry_id)
+    if not entry or (current_user.role != 'Administrator' and entry.station_id != current_user.officer.station_id):
+        abort(404)
+    
+    station_officers = Officer.query.filter_by(station_id=current_user.officer.station_id).all()
+    assign_form = AssignInvestigatorForm()
+    assign_form.investigator_id.choices = [(o.id, f"{o.rank} {o.full_name} ({o.service_number})") for o in station_officers]
+    
+    note_form = InvestigationNoteForm()
+    evidence_form = EvidenceUploadForm()
+    
+    if entry.investigation and entry.investigation.investigator_id:
+        assign_form.investigator_id.data = entry.investigation.investigator_id
+
+    unlinked_suspects = Suspect.query.filter(~Suspect.ob_entries.any(OBEntry.id == entry.id)).all()
+
+    return render_template('ob_detail.html', entry=entry, assign_form=assign_form, note_form=note_form, evidence_form=evidence_form, unlinked_suspects=unlinked_suspects)
+
+@app.route('/ob/<int:entry_id>/assign', methods=['POST'])
+@login_required
+@role_required(['Administrator', 'OCS'])
+def assign_investigator(entry_id):
+    entry = db.session.get(OBEntry, entry_id)
+    if not entry or (current_user.role != 'Administrator' and entry.station_id != current_user.officer.station_id):
+        abort(404)
+    
+    station_officers = Officer.query.filter_by(station_id=current_user.officer.station_id).all()
+    form = AssignInvestigatorForm()
+    form.investigator_id.choices = [(o.id, o.full_name) for o in station_officers]
+    
+    if form.validate_on_submit():
+        if not entry.investigation:
+            entry.investigation = Investigation(ob_entry_id=entry.id)
+        entry.investigation.investigator_id = form.investigator_id.data
+        entry.status = 'Under Investigation'
         
-        db.session.add(InvestigationNote(
-            ob_entry_id=entry.id,
-            note_type='Timeline Entry',
-            text_content="Core incident sequence submitted via console terminal framework memory spaces.",
-            recorded_by=current_user.full_name
-        ))
+        note = InvestigationNote(
+            investigation_id=entry.investigation.id,
+            note_type='Timeline',
+            entry_title='Investigator Assigned Portfolio',
+            statement_body=f"Case file transferred to Investigator {entry.investigation.investigator.rank} {entry.investigation.investigator.full_name}."
+        )
+        db.session.add(note)
         db.session.commit()
-        commit_audit(f"Created new Digital Occurrence Book entry row string link: {ob_seq_string}")
-        flash(f"System Log committed successfully into permanent block index mapping string code: {ob_seq_string}", "success")
-        return redirect(url_for('occurrence_book'))
-        
-    if current_user.role == 'Administrator':
-        records = OBEntry.query.order_by(OBEntry.id.desc()).all()
-    else:
-        records = OBEntry.query.filter_by(station_id=current_user.station_id).order_by(OBEntry.id.desc()).all()
-        
-    html = """
-    <div class="space-y-6">
-        {% if current_user.role in ['Desk Officer', 'Administrator'] %}
-        <div class="bg-black p-6 rounded-xl border border-matteGold/15 luxury-card">
-            <h2 class="text-xs font-mono font-black uppercase mb-4 border-b pb-2 text-white tracking-widest flex items-center space-x-2">
-                <span>📝 Append New Primary Incident Occurrence Log</span>
-            </h2>
-            <form method="POST" class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Complainant Full Name</label>
-                    <input type="text" name="complainant_name" required class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">National ID / Passport</label>
-                    <input type="text" name="national_id" required class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Telephone Demographics Link</label>
-                    <input type="text" name="phone_number" required class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Gender Specification</label>
-                    <select name="gender" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Corporate/Other">Corporate Entity / Intersex</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Incident Physical Location</label>
-                    <input type="text" name="incident_location" required class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Statutory Penal Category Class</label>
-                    <select name="crime_category" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                        <option value="Assault and Physical Harm Matrix">Assault and Physical Harm Matrix</option>
-                        <option value="Armed Robbery / Burglary Invasion">Armed Robbery / Burglary Invasion</option>
-                        <option value="Financial Fraud / Cyber System Intrusion">Financial Fraud / Cyber System Intrusion</option>
-                        <option value="Narcotics Traffic / Substance Violation">Narcotics Traffic / Substance Violation</option>
-                        <option value="Homicide / Severe Capital Malfeasance">Homicide / Severe Capital Malfeasance</option>
-                    </select>
-                </div>
-                <div class="md:col-span-3">
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Residential Home Address</label>
-                    <input type="text" name="address" required class="w-full p-3 border rounded-lg bg-black font-sans outline-none luxury-input text-xs">
-                </div>
-                <div class="md:col-span-3">
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Exhaustive Deposition Transcript Statement Text Narrative</label>
-                    <textarea name="narrative" rows="3" required class="w-full p-3 border rounded-lg bg-black font-sans outline-none luxury-input text-xs leading-relaxed"></textarea>
-                </div>
-                <button type="submit" class="md:col-span-3 bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
-                    Lock Entry Matrix Segment Block Permanently to DB Memory
-                </button>
-            </form>
-        </div>
-        {% endif %}
-        
-        <div class="bg-black border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
-            <div class="bg-luxury-navy p-4 text-white font-mono font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
-                📖 Active System Ledger Journal Stream Table Data View
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-xs border-collapse">
-                    <thead class="bg-gray-50 font-mono text-[10px] uppercase text-gray-400 border-b tracking-wider">
-                        <tr class="divide-x divide-gray-100">
-                            <th class="p-4">OB Code</th>
-                            <th class="p-4">Filing Date</th>
-                            <th class="p-4">Complainant</th>
-                            <th class="p-4">Offense Class Category Type</th>
-                            <th class="p-4">State Phase</th>
-                            <th class="p-4 text-center">Action Arrays</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 font-sans text-gray-700">
-                        {% for r in records %}
-                        <tr class="hover:bg-gray-50/80 divide-x divide-gray-50 transition-all duration-150">
-                            <td class="p-4 font-mono font-extrabold text-mediumblue text-sm tracking-wide">{{ r.ob_number }}</td>
-                            <td class="p-4 text-gray-400 font-mono text-[11px]">{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                            <td class="p-4 font-bold text-gray-900 text-xs">{{ r.complainant_name }}</td>
-                            <td class="p-4"><span class="bg-slateblack text-mediumblue px-2.5 py-1 border border-black text-[10px] rounded-md font-mono font-bold">{{ r.crime_category }}</span></td>
-                            <td class="p-4">
-                                <span class="text-[9px] font-mono font-black uppercase border px-2.5 py-1 rounded-full shadow-sm
-                                           {% if r.status == 'Pending Review' %} bg-amber-50 text-amber-800 border-amber-300
-                                           {% elif r.status == 'Under Investigation' %} bg-blue-50 text-white-800 border-blue-300
-                                           {% elif r.status == 'Closed' %} bg-emerald-50 text-emerald-800 border-emerald-300
-                                           {% else %} bg-purple-50 text-purple-800 border-purple-300 {% endif %}">
-                                    {{ r.status }}
-                                </span>
-                            </td>
-                            <td class="p-4 flex space-x-2 justify-center font-mono">
-                                <a href="/case-workspace/{{ r.id }}" class="bg-luxury-navy text-white border border-matteGold/30 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-securityBlue transition-all">Workspace</a>
-                                <a href="/abstract/download/{{ r.id }}" class="bg-gold-gradient text-mediumblue px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider hover:opacity-90 transition-all shadow-sm">PDF Abstract</a>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    """
-    return generate_nps_response(html, records=records)
+        log_audit(f"CASE ASSIGNED: OB {entry.ob_number} assigned to IO ID: {form.investigator_id.data}")
+        flash("Investigator assigned and case dossier status promoted to Active.", "success")
+    return redirect(url_for('ob_detail', entry_id=entry.id))
 
-@app.route('/case-workspace/<int:entry_id>', methods=['GET', 'POST'])
+@app.route('/ob/<int:entry_id>/note', methods=['POST'])
 @login_required
-def case_workspace(entry_id):
-    entry = OBEntry.query.get_or_404(entry_id)
-    if current_user.role != 'Administrator' and entry.station_id != current_user.station_id:
-        abort(403)
+@role_required(['Administrator', 'OCS', 'Investigator'])
+def add_investigation_note(entry_id):
+    entry = db.session.get(OBEntry, entry_id)
+    if not entry or (current_user.role != 'Administrator' and entry.station_id != current_user.officer.station_id):
+        abort(404)
         
-    investigators = User.query.filter_by(role='Investigator', is_active=True).all()
-    all_suspects = Suspect.query.all()
-    
-    html = """
-    <div class="space-y-6">
-        <div class="border-b pb-3 border-matteGold/20 flex justify-between items-center">
-            <h1 class="text-xl font-black text-mediumblue uppercase font-mono tracking-wide flex items-center">
-                <span>🔍 Case Investigative Shell Terminal: <span class="text-white">{{ entry.ob_number }}</span></span>
-            </h1>
-            <span class="px-4 py-1.5 bg-luxury-navy border border-matteGold/30 text-white font-mono text-xs font-bold rounded-lg shadow-md">Jurisdiction Hub: {{ entry.station.name }}</span>
-        </div>
-        
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 text-xs">
-            <div class="bg-black p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4 font-mono">
-                <h3 class="font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">Primary Core Parameters</h3>
-                <div class="space-y-2.5">
-                    <p class="text-gray-400">Complainant File Identity: <span class="text-mediumblue font-sans font-black block text-sm mt-0.5">{{ entry.complainant_name }}</span></p>
-                    <p class="text-gray-400">National ID Token: <span class="text-mediumblue font-bold block mt-0.5">{{ entry.national_id }}</span></p>
-                    <p class="text-gray-400">Telephone Line Trace: <span class="text-mediumblue font-bold block mt-0.5">{{ entry.phone_number }}</span></p>
-                    <p class="text-gray-400">Physical Location Site: <span class="text-mediumblue font-sans font-bold block mt-0.5">{{ entry.incident_location }}</span></p>
-                </div>
-                
-                <div class="bg-slateblack p-4 rounded-xl border text-gray-700 font-sans leading-relaxed italic shadow-inner">
-                    "{{ entry.narrative }}"
-                </div>
-                
-                <div class="pt-3 border-t border-gray-100 space-y-4">
-                    <p class="text-gray-400 font-bold tracking-wide">Assigned Detective Handler: <br>
-                        <span class="text-indigo-950 font-sans font-black text-xs block mt-1 bg-gray-50 border p-2 rounded-lg shadow-sm">
-                            👉 {% if entry.investigator %} {{ entry.investigator.rank }} {{ entry.investigator.full_name }} ({{ entry.investigator.service_number }}) {% else %} Unassigned/Pending Allocation Matrix {% endif %}
-                        </span>
-                    </p>
-                    
-                    {% if current_user.role in ['OCS', 'Administrator'] %}
-                    <form action="/case-workspace/{{ entry.id }}/assign" method="POST" class="space-y-2 border-t border-gray-100 pt-3">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <label class="block text-[10px] font-black uppercase text-gray-400 tracking-wider">Allocate Active Investigator Handler</label>
-                        <select name="investigator_id" class="w-full p-2.5 border rounded-lg font-sans bg-black outline-none luxury-input text-xs cursor-pointer">
-                            {% for inv in investigators %}
-                            <option value="{{ inv.id }}" {% if entry.investigator_id == inv.id %} selected {% endif %}>{{ inv.rank }} {{ inv.full_name }}</option>
-                            {% endfor %}
-                        </select>
-                        <button type="submit" class="w-full bg-luxury-navy text-white border border-matteGold/30 font-bold py-2 rounded-lg uppercase text-[10px] tracking-widest hover:opacity-90 transition-all shadow-md">Mutate Investigator Link</button>
-                    </form>
-                    
-                    <form action="/case-workspace/{{ entry.id }}/status" method="POST" class="space-y-2 border-t border-gray-100 pt-3">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <label class="block text-[10px] font-black uppercase text-gray-400 tracking-wider">Transition Global Lifecycle Phase</label>
-                        <select name="status" class="w-full p-2.5 border rounded-lg font-sans bg-black outline-none luxury-input text-xs cursor-pointer">
-                            <option value="Pending Review" {% if entry.status == 'Pending Review' %} selected {% endif %}>Pending Review</option>
-                            <option value="Under Investigation" {% if entry.status == 'Under Investigation' %} selected {% endif %}>Under Investigation</option>
-                            <option value="Arrest Made" {% if entry.status == 'Arrest Made' %} selected {% endif %}>Arrest Made</option>
-                            <option value="Court Process" {% if entry.status == 'Court Process' %} selected {% endif %}>Court Process</option>
-                            <option value="Closed" {% if entry.status == 'Closed' %} selected {% endif %}>Closed</option>
-                        </select>
-                        <button type="submit" class="w-full bg-amber-600 text-white font-black py-2 rounded-lg uppercase text-[10px] tracking-widest hover:bg-amber-700 transition-all shadow-md">Execute State Transition</button>
-                    </form>
-                    {% endif %}
-                </div>
-            </div>
-            
-            <div class="lg:col-span-2 space-y-6">
-                <div class="bg-black p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4">
-                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">Linked Target Suspect Profile Associations</h3>
-                    <div class="flex flex-wrap gap-2.5">
-                        {% for sus in entry.suspects %}
-                        <div class="bg-red-50 border border-red-200 p-3 rounded-lg flex items-center space-x-3 text-xs font-mono shadow-sm">
-                            <div>
-                                <span class="font-sans font-black text-red-900 block text-xs">{{ sus.full_name }}</span>
-                                <span class="text-[10px] text-gray-500 block">ID Trace Link: {{ sus.national_id }}</span>
-                            </div>
-                            <form action="/case-workspace/{{ entry.id }}/unlink-suspect/{{ sus.id }}" method="POST">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="text-red-500 hover:text-red-800 font-black text-sm px-1.5 transition-all">&times;</button>
-                            </form>
-                        </div>
-                        {% else %}
-                        <p class="text-gray-400 italic text-xs font-mono py-1">No target suspects currently mapped to this specific offense structure array matrix.</p>
-                        {% endfor %}
-                    </div>
-                    {% if current_user.role in ['Investigator', 'OCS', 'Administrator'] %}
-                    <form action="/case-workspace/{{ entry.id }}/link-suspect" method="POST" class="flex space-x-2 border-t border-gray-100 pt-3 items-end">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="flex-1 font-mono">
-                            <label class="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Map Suspect Node from Global Registry Index</label>
-                            <select name="suspect_id" class="w-full p-2.5 border text-xs font-mono bg-black rounded-lg outline-none luxury-input cursor-pointer">
-                                {% for global_sus in all_suspects %}
-                                <option value="{{ global_sus.id }}">{{ global_sus.full_name }} [ID: {{ global_sus.national_id }}]</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <button type="submit" class="bg-luxury-navy text-white border border-matteGold/30 px-5 py-2.5 font-mono rounded-lg text-xs font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-md">Bind Link</button>
-                    </form>
-                    {% endif %}
-                </div>
-                
-                <div class="bg-black p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4">
-                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">Chronological Case Ledger Matrix Journal</h3>
-                    <div class="space-y-3 max-h-72 overflow-y-auto font-mono text-[11px] pr-1">
-                        {% for note in entry.notes %}
-                        <div class="p-3.5 bg-gray-50 border border-black rounded-lg shadow-inner space-y-1.5">
-                            <div class="flex justify-between text-[9px] text-gray-400 font-black tracking-widest uppercase border-b border-black/60 pb-1">
-                                <span>🕒 Index Clock: {{ note.timestamp.strftime('%Y-%m-%d %H:%M:%S') }} UTC</span>
-                                <span class="bg-luxury-navy border border-matteGold/20 text-white px-2 py-0.5 rounded text-[8px] tracking-wide">Actor: {{ note.recorded_by }}</span>
-                            </div>
-                            <p class="font-sans text-gray-800 text-xs leading-relaxed font-semibold">
-                                <span class="text-[9px] font-mono font-black px-2 py-0.5 bg-slate-200 rounded text-slate-700 uppercase mr-1 tracking-wide">[{{ note.note_type }}]</span>
-                                {{ note.text_content }}
-                            </p>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    
-                    {% if current_user.role in ['Investigator', 'OCS', 'Administrator'] %}
-                    <form action="/case-workspace/{{ entry.id }}/add-note" method="POST" class="space-y-3 pt-3 border-t border-gray-100 font-mono">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div class="md:col-span-1">
-                                <label class="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Classification Tag</label>
-                                <select name="note_type" class="w-full p-2.5 border text-xs bg-black rounded-lg outline-none luxury-input font-sans cursor-pointer">
-                                    <option value="Timeline Entry">Timeline Update</option>
-                                    <option value="Witness Statement Log">Witness Statement Log</option>
-                                    <option value="General Progress Track">General Progress Track</option>
-                                    <option value="Arrest Record Note">Arrest Record Note</option>
-                                </select>
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Transcribe Narrative Update</label>
-                                <div class="flex space-x-2">
-                                    <input type="text" name="text_content" required placeholder="Append field updates into journal pipeline..." 
-                                           class="flex-1 p-2.5 border font-sans text-xs bg-black rounded-lg outline-none luxury-input">
-                                    <button type="submit" class="bg-luxury-navy text-white border border-matteGold/30 font-black px-5 rounded-lg text-xs uppercase tracking-widest hover:opacity-90 transition-all shadow-md">Commit</button>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                    {% endif %}
-                </div>
-                
-                <div class="bg-black p-5 border border-matteGold/10 rounded-xl luxury-card space-y-4">
-                    <h3 class="font-mono font-black border-b border-matteGold/10 pb-2 text-white uppercase text-xs tracking-wider">🔒 Secure Vault Evidence Repository</h3>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono text-[10px]">
-                        {% for file in entry.evidence_files %}
-                        <div class="bg-gray-50 border border-black p-3 rounded-lg text-center space-y-2 flex flex-col justify-between shadow-sm relative overflow-hidden">
-                            <div class="w-full h-12 bg-luxury-navy text-white flex items-center justify-center font-black rounded-lg text-xl tracking-widest shadow-inner border border-matteGold/10">
-                                📑
-                            </div>
-                            <div class="truncate text-gray-700 font-extrabold text-xs" title="{{ file.original_name }}">{{ file.original_name }}</div>
-                            <div class="text-[8px] text-gray-400 uppercase truncate">By: {{ file.uploaded_by }}</div>
-                            <a href="/vault/download/{{ file.id }}" class="bg-luxury-navy hover:bg-securityBlue border border-matteGold/20 text-white text-[9px] py-1.5 rounded-md font-black block uppercase tracking-widest transition-all duration-150 shadow-sm">Retrieve File</a>
-                        </div>
-                        {% else %}
-                        <p class="col-span-2 md:col-span-4 text-gray-400 italic font-mono text-xs py-1">No binary stream payload blocks associated with this case file configuration record sequence.</p>
-                        {% endfor %}
-                    </div>
-                    
-                    {% if current_user.role in ['Investigator', 'Desk Officer', 'Administrator'] %}
-                    <form action="/case-workspace/{{ entry.id }}/upload-evidence" method="POST" enctype="multipart/form-data" class="border-t border-gray-100 pt-3 flex items-end space-x-3 font-mono">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                        <div class="flex-1">
-                            <label class="block text-[10px] font-black uppercase text-gray-400 mb-1 tracking-wider">Stream Payload Binary Block File Upload</label>
-                            <input type="file" name="evidence_payload" required class="w-full p-2 border text-xs bg-black rounded-lg outline-none luxury-input cursor-pointer file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-[10px] file:font-black file:uppercase file:bg-luxury-navy file:text-white file:cursor-pointer">
-                        </div>
-                        <button type="submit" class="bg-gradient-to-r from-emerald-700 to-emerald-900 border border-emerald-600 text-white font-black px-5 py-2.5 rounded-lg text-xs uppercase tracking-wider hover:opacity-95 transition-all shadow-md">
-                            Upload Injection
-                        </button>
-                    </form>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-    """
-    return generate_nps_response(html, entry=entry, investigators=investigators, all_suspects=all_suspects)
+    form = InvestigationNoteForm()
+    if form.validate_on_submit():
+        note = InvestigationNote(
+            investigation_id=entry.investigation.id,
+            note_type=form.note_type.data,
+            entry_title=form.entry_title.data,
+            statement_body=form.statement_body.data
+        )
+        entry.status = form.case_status.data
+        db.session.add(note)
+        db.session.commit()
+        log_audit(f"DOSSIER UPDATE: Modified case {entry.ob_number} status to {entry.status}")
+        flash("Investigation journal repository extended successfully.", "success")
+    return redirect(url_for('ob_detail', entry_id=entry.id))
 
-@app.route('/case-workspace/<int:entry_id>/assign', methods=['POST'])
+@app.route('/ob/<int:entry_id>/evidence', methods=['POST'])
 @login_required
-def case_assign_investigator(entry_id):
-    if current_user.role not in ['OCS', 'Administrator']: abort(403)
-    entry = OBEntry.query.get_or_404(entry_id)
-    inv_id = request.form.get('investigator_id')
-    entry.investigator_id = inv_id
-    db.session.commit()
-    
-    inv_user = User.query.get(inv_id)
-    db.session.add(InvestigationNote(
-        ob_entry_id=entry.id,
-        note_type='Timeline Entry',
-        text_content=f"Primary file processing ownership mapping parameters reassigned dynamically to handler detective token node: {inv_user.rank} {inv_user.full_name}",
-        recorded_by=current_user.full_name
-    ))
-    db.session.commit()
-    commit_audit(f"Mutated detective handler mapping linkage parameters on OB file identifier structure index string: {entry.ob_number}")
-    flash("Investigative asset tracking parameter matrix link updated successfully.", "success")
-    return redirect(url_for('case_workspace', entry_id=entry.id))
-
-@app.route('/case-workspace/<int:entry_id>/status', methods=['POST'])
-@login_required
-def case_update_status(entry_id):
-    if current_user.role not in ['OCS', 'Administrator']: abort(403)
-    entry = OBEntry.query.get_or_404(entry_id)
-    new_stat = request.form.get('status')
-    entry.status = new_stat
-    db.session.commit()
-    
-    db.session.add(InvestigationNote(
-        ob_entry_id=entry.id,
-        note_type='Timeline Entry',
-        text_content=f"System Global Lifecycle tracking state configuration variable mutated to index state parameter value string: {new_stat}",
-        recorded_by=current_user.full_name
-    ))
-    db.session.commit()
-    commit_audit(f"Actuated core milestone framework sequence shift to state [{new_stat}] on OB row string index tracker code: {entry.ob_number}")
-    flash("Workflow structural lifecycle configuration variable updated successfully across system memory pipelines.", "success")
-    return redirect(url_for('case_workspace', entry_id=entry.id))
-
-@app.route('/case-workspace/<int:entry_id>/add-note', methods=['POST'])
-@login_required
-def case_append_note(entry_id):
-    if current_user.role not in ['Investigator', 'OCS', 'Administrator']: abort(403)
-    entry = OBEntry.query.get_or_404(entry_id)
-    
-    note = InvestigationNote(
-        ob_entry_id=entry.id,
-        note_type=request.form.get('note_type'),
-        text_content=request.form.get('text_content'),
-        recorded_by=f"{current_user.rank} {current_user.full_name}"
-    )
-    db.session.add(note)
-    db.session.commit()
-    commit_audit(f"Appended chronological milestone update layer row to case tracker sequence string mapping hash: {entry.ob_number}")
-    flash("Ledger update trace successfully written to case transactional memory space logs.", "success")
-    return redirect(url_for('case_workspace', entry_id=entry.id))
-
-@app.route('/case-workspace/<int:entry_id>/upload-evidence', methods=['POST'])
-@login_required
-def case_inject_evidence(entry_id):
-    if current_user.role not in ['Investigator', 'Desk Officer', 'Administrator']: abort(403)
-    entry = OBEntry.query.get_or_404(entry_id)
-    
-    file = request.files.get('evidence_payload')
-    if file and file.filename != '':
-        orig = file.filename
-        ext = os.path.splitext(orig)[1]
-        secure_token_filename = f"NPS_VAULT_{secrets.token_hex(12)}{ext}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], secure_token_filename)
-        file.save(filepath)
+def upload_evidence(entry_id):
+    entry = db.session.get(OBEntry, entry_id)
+    if not entry or (current_user.role != 'Administrator' and entry.station_id != current_user.officer.station_id):
+        abort(404)
+    form = EvidenceUploadForm()
+    if form.validate_on_submit():
+        file = form.evidence_file.data
+        filename = secure_filename(f"{entry.id}_{int(datetime.utcnow().timestamp())}_{file.filename}")
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         
         evidence = Evidence(
             ob_entry_id=entry.id,
-            filename=secure_token_filename,
-            original_name=orig,
-            file_type=file.content_type or "application/octet-stream",
-            uploaded_by=f"{current_user.rank} {current_user.full_name}"
+            file_name=filename,
+            file_type=file.filename.split('.')[-1].upper(),
+            uploaded_by_user_id=current_user.id
         )
         db.session.add(evidence)
-        
-        db.session.add(InvestigationNote(
-            ob_entry_id=entry.id,
-            note_type='General Progress Track',
-            text_content=f"Secure binary stream element uploaded into crypt vault schema storage array space. File block tracker mapping name reference: {orig}",
-            recorded_by=current_user.full_name
-        ))
         db.session.commit()
-        commit_audit(f"Uploaded binary sequence module structure packet footprint payload to case log row tracking string: {entry.ob_number}")
-        flash("Payload block bound and committed securely into digital infrastructure vault memory storage arrays.", "success")
-        
-    return redirect(url_for('case_workspace', entry_id=entry.id))
+        log_audit(f"EVIDENCE ESCROW: Secure upload committed for Case {entry.ob_number}")
+        flash("Digital structural evidence element safely secured.", "success")
+    return redirect(url_for('ob_detail', entry_id=entry.id))
 
-@app.route('/case-workspace/<int:entry_id>/link-suspect', methods=['POST'])
+@app.route('/ob/<int:entry_id>/link-suspect', methods=['POST'])
 @login_required
-def case_bind_suspect_link(entry_id):
-    if current_user.role not in ['Investigator', 'OCS', 'Administrator']: abort(403)
-    entry = OBEntry.query.get_or_404(entry_id)
-    sus_id = request.form.get('suspect_id')
-    suspect = Suspect.query.get_or_404(sus_id)
-    
-    if suspect not in entry.suspects:
-        entry.suspects.append(suspect)
-        db.session.add(InvestigationNote(
-            ob_entry_id=entry.id,
-            note_type='Timeline Entry',
-            text_content=f"Linked suspect profile trace index element bound to case tracking space parameters: {suspect.full_name} [ID Code Link: {suspect.national_id}]",
-            recorded_by=current_user.full_name
-        ))
-        db.session.commit()
-        commit_audit(f"Bound relationship model association mapping between suspect [{suspect.national_id}] and case string row index tracker key: {entry.ob_number}")
-        flash("Criminal suspect tracking trace successfully bound to current occurrence file parameter schema.", "success")
-    else:
-        flash("Entity relation link trace mapping definition already exists inside database runtime indices.", "danger")
-        
-    return redirect(url_for('case_workspace', entry_id=entry.id))
+@role_required(['Administrator', 'OCS', 'Investigator'])
+def link_suspect(entry_id):
+    entry = db.session.get(OBEntry, entry_id)
+    suspect_id = request.form.get('suspect_id')
+    suspect = db.session.get(Suspect, suspect_id)
+    if entry and suspect:
+        if entry.station_id == current_user.officer.station_id or current_user.role == 'Administrator':
+            entry.suspects.append(suspect)
+            db.session.commit()
+            log_audit(f"SUSPECT LINKED: Linked suspect {suspect.full_name} to case {entry.ob_number}")
+            flash("Suspect mapped to operational file registry.", "success")
+    return redirect(url_for('ob_detail', entry_id=entry.id))
 
-@app.route('/case-workspace/<int:entry_id>/unlink-suspect/<int:suspect_id>', methods=['POST'])
+@app.route('/ob/<int:entry_id>/unlink-suspect/<int:suspect_id>', methods=['POST'])
 @login_required
-def case_drop_suspect_link(entry_id):
-    if current_user.role not in ['Investigator', 'OCS', 'Administrator']: abort(403)
-    entry = OBEntry.query.get_or_404(entry_id)
-    suspect = Suspect.query.get_or_404(suspect_id)
-    
-    if suspect in entry.suspects:
-        entry.suspects.remove(suspect)
-        db.session.add(InvestigationNote(
-            ob_entry_id=entry.id,
-            note_type='Timeline Entry',
-            text_content=f"Dropped linked suspect profile association map array parameters footprint: {suspect.full_name}",
-            recorded_by=current_user.full_name
-        ))
-        db.session.commit()
-        commit_audit(f"Severed relationship model reference map index row link between suspect [{suspect.national_id}] and case code string: {entry.ob_number}")
-        flash("Relationship tracing context unlinked successfully.", "success")
-        
-    return redirect(url_for('case_workspace', entry_id=entry.id))
+@role_required(['Administrator', 'OCS', 'Investigator'])
+def unlink_suspect(entry_id, suspect_id):
+    entry = db.session.get(OBEntry, entry_id)
+    suspect = db.session.get(Suspect, suspect_id)
+    if entry and suspect:
+        if entry.station_id == current_user.officer.station_id or current_user.role == 'Administrator':
+            if suspect in entry.suspects:
+                entry.suspects.remove(suspect)
+                db.session.commit()
+                log_audit(f"SUSPECT UNLINKED: Disconnected suspect {suspect.full_name} from case {entry.ob_number}")
+                flash("Suspect profile safely isolated and unlinked from active file record.", "success")
+    return redirect(url_for('ob_detail', entry_id=entry.id))
 
-@app.route('/vault/download/<int:evidence_id>')
-@login_required
-def vault_retrieve_stream(evidence_id):
-    ev = Evidence.query.get_or_404(evidence_id)
-    if current_user.role != 'Administrator' and ev.ob_entry.station_id != current_user.station_id:
-        abort(403)
-    commit_audit(f"Retrieved and opened secure digital vault evidence file packet asset: {ev.original_name}")
-    return send_from_directory(app.config['UPLOAD_FOLDER'], ev.filename, download_name=ev.original_name, as_attachment=True)
 
-@app.route('/abstract/download/<int:entry_id>')
-def public_download_abstract(entry_id):
-    ob = OBEntry.query.get_or_404(entry_id)
-    buf = BytesIO()
-    build_pdf_abstract(ob, buf)
-    buf.seek(0)
-    
-    sanitized_ob_string_filename = f"NPS_Certified_Digital_Abstract_{ob.ob_number.replace('/', '_')}.pdf"
-    commit_audit(f"Compiled and outputted certified legal police abstract document streaming PDF module footprint matching track: {ob.ob_number}")
-    return Response(buf.read(), mimetype='application/pdf', headers={'Content-Disposition': f'attachment; filename={sanitized_ob_string_filename}'})
+# --- SUSPECT REGISTRY LOGISTICS ---
 
-@app.route('/suspect-registry', methods=['GET', 'POST'])
+@app.route('/suspects', methods=['GET', 'POST'])
 @login_required
 def suspect_registry():
-    if request.method == 'POST':
-        if current_user.role not in ['Investigator', 'Administrator']: abort(403)
-        
-        sus = Suspect(
-            full_name=request.form.get('full_name'),
-            national_id=request.form.get('national_id') or None,
-            date_of_birth=request.form.get('date_of_birth'),
-            gender=request.form.get('gender'),
-            address=request.form.get('address'),
-            phone_number=request.form.get('phone_number'),
-            arrest_history_summary=request.form.get('arrest_history_summary')
+    form = SuspectForm()
+    if form.validate_on_submit():
+        suspect = Suspect(
+            full_name=form.full_name.data,
+            national_id=form.national_id.data,
+            date_of_birth=form.date_of_birth.data,
+            gender=form.gender.data,
+            address=form.address.data,
+            phone_number=form.phone_number.data,
+            arrest_history=form.arrest_history.data
         )
-        db.session.add(sus)
+        db.session.add(suspect)
         db.session.commit()
-        commit_audit(f"Provisioned and compiled new suspect biographic profile token into database master indexes: {sus.full_name}")
-        flash("Criminal target tracking data structure profile node successfully loaded into system indices.", "success")
+        log_audit(f"SUSPECT PROFILE GENERATED: Identity record {suspect.national_id}")
+        flash("Criminal suspect infrastructure profile mapped successfully.", "success")
         return redirect(url_for('suspect_registry'))
-        
-    suspects = Suspect.query.order_by(Suspect.id.desc()).all()
-    html = """
-    <div class="space-y-6">
-        {% if current_user.role in ['Investigator', 'Administrator'] %}
-        <div class="bg-black p-6 rounded-xl border border-matteGold/15 luxury-card">
-            <h2 class="text-xs font-mono font-black uppercase mb-4 border-b pb-2 text-white tracking-widest">
-                👥 Insert Target Criminal Suspect Profile Module
-            </h2>
-            <form method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-mono">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Suspect Identity Name</label>
-                    <input type="text" name="full_name" required class="w-full p-3 border rounded-lg bg-black font-sans outline-none luxury-input text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">National ID Card Code</label>
-                    <input type="text" name="national_id" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Date of Birth</label>
-                    <input type="date" name="date_of_birth" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs cursor-pointer">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Gender Profile</label>
-                    <select name="gender" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Unknown/Undetermined">Unknown/Undetermined</option>
-                    </select>
-                </div>
-                <div class="md:col-span-2">
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Last Known Physical Address</label>
-                    <input type="text" name="address" class="w-full p-3 border rounded-lg bg-black font-sans outline-none luxury-input text-xs">
-                </div>
-                <div class="md:col-span-2">
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Suspect Phone Contact</label>
-                    <input type="text" name="phone_number" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs">
-                </div>
-                <div class="md:col-span-4">
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Prior Convictions Historical Summary</label>
-                    <textarea name="arrest_history_summary" rows="2" placeholder="Detail standard active warrant identifiers or historical penological data..." class="w-full p-3 border rounded-lg bg-black font-sans outline-none luxury-input text-xs leading-relaxed"></textarea>
-                </div>
-                <button type="submit" class="md:col-span-4 bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
-                    Lock Suspect Dossier into Intelligence Ledger Matrix Memory
-                </button>
-            </form>
-        </div>
-        {% endif %}
-        
-        <div class="bg-black border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
-            <div class="bg-luxury-navy p-4 text-white font-mono font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
-                👤 Intelligence Profile Central Registry Data Matrix
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left text-xs border-collapse">
-                    <thead class="bg-gray-50 font-mono text-[10px] uppercase text-gray-400 border-b tracking-wider">
-                        <tr class="divide-x divide-gray-100">
-                            <th class="p-4">Suspect Name</th>
-                            <th class="p-4">Biographic Demographics</th>
-                            <th class="p-4">Address & Comms</th>
-                            <th class="p-4">Historical Track Summary Dossier</th>
-                            <th class="p-4 text-center">Active Linked Files</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 font-sans text-gray-700">
-                        {% for s in suspects %}
-                        <tr class="hover:bg-gray-50/80 divide-x divide-gray-50 transition-all duration-150">
-                            <td class="p-4 font-extrabold text-mediumblue text-sm">{{ s.full_name }}</td>
-                            <td class="p-4 font-mono text-[11px] space-y-0.5 text-gray-600">
-                                <span class="block text-mediumblue font-semibold">ID: {% if s.national_id %}{{ s.national_id }}{% else %}N/A{% endif %}</span>
-                                <span class="block text-[10px]">DOB: {{ s.date_of_birth }} | Gen: {{ s.gender }}</span>
-                            </td>
-                            <td class="p-4 space-y-0.5 font-medium text-xs">
-                                <span class="block text-mediumblue">📍 {{ s.address or 'No Address Tracked' }}</span>
-                                <span class="block text-gray-400 font-mono text-[11px]">📞 {{ s.phone_number or 'N/A' }}</span>
-                            </td>
-                            <td class="p-4 max-w-xs text-xs italic text-gray-500 font-medium truncate" title="{{ s.arrest_history_summary }}">
-                                {{ s.arrest_history_summary or 'No historical felony tracking instances committed.' }}
-                            </td>
-                            <td class="p-4 text-center font-mono">
-                                <span class="bg-red-50 text-red-900 border border-red-200 font-black px-3 py-1 rounded-full text-[10px] uppercase tracking-wide shadow-sm">
-                                    {{ s.ob_entries.count() }} Files Linked
-                                </span>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    """
-    return generate_nps_response(html, suspects=suspects)
-
-@app.route('/officer-management', methods=['GET', 'POST'])
-@login_required
-def officer_management():
-    if current_user.role not in ['Administrator', 'OCS']: abort(403)
-    stations = Station.query.all()
     
-    if request.method == 'POST':
-        action_flag = request.form.get('action_flag')
-        
-        if action_flag == 'create_officer':
-            svc_num = request.form.get('service_number', '').strip().upper()
-            if User.query.filter_by(service_number=svc_num).first():
-                flash("Operational allocation anomaly: Force service number already exists.", "danger")
-                return redirect(url_for('officer_management'))
-                
-            officer = User(
-                service_number=svc_num,
-                password_hash=generate_password_hash(request.form.get('password')),
-                full_name=request.form.get('full_name'),
-                rank=request.form.get('rank'),
-                role=request.form.get('role'),
-                department=request.form.get('department'),
-                email=request.form.get('email'),
-                phone=request.form.get('phone'),
-                station_id=request.form.get('station_id') or None,
-                is_active=True
-            )
-            db.session.add(officer)
-            db.session.commit()
-            commit_audit(f"Provisioned and authorized force account personnel credential token block mapping: {svc_num}")
-            flash("Force account asset successfully attached and synchronized onto command database.", "success")
-            
-        elif action_flag == 'toggle_status':
-            if current_user.role != 'Administrator': abort(403)
-            t_id = request.form.get('target_user_id')
-            t_user = User.query.get_or_404(t_id)
-            t_user.is_active = not t_user.is_active
-            db.session.commit()
-            commit_audit(f"Toggled administrative authorization state parameters on force profile node: {t_user.service_number}")
-            flash("Personnel infrastructure access status successfully modified.", "success")
-            
-        return redirect(url_for('officer_management'))
-        
-    if current_user.role == 'Administrator':
-        officers = User.query.order_by(User.id.desc()).all()
-    else:
-        officers = User.query.filter_by(station_id=current_user.station_id).order_by(User.id.desc()).all()
-        
-    html = """
-    <div class="space-y-6 font-mono text-xs">
-        <div class="bg-black p-6 rounded-xl border border-matteGold/15 luxury-card">
-            <h2 class="text-xs font-black uppercase mb-4 border-b pb-2 text-white tracking-widest">
-                👮 Authorize New Active Force Personnel Credentials Block
-            </h2>
-            <form method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="action_flag" value="create_officer">
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Service Number ID String</label>
-                    <input type="text" name="service_number" required class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs uppercase tracking-wider">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Passcode Access Cipher</label>
-                    <input type="password" name="password" required class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Full Official Name</label>
-                    <input type="text" name="full_name" required class="w-full p-3 border rounded-lg bg-black outline-none luxury-input text-xs font-sans">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Active Rank Tier Level</label>
-                    <select name="rank" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                        <option value="Constable">Constable</option>
-                        <option value="Sergeant">Sergeant</option>
-                        <option value="Inspector">Inspector</option>
-                        <option value="Chief Inspector">Chief Inspector</option>
-                        <option value="Superintendent">Superintendent</option>
-                        <option value="Commissioner">Commissioner</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">RBAC Permission Role</label>
-                    <select name="role" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                        <option value="Desk Officer">Desk Officer (OB Inputs)</option>
-                        <option value="Investigator">Investigator (Field Case Logs)</option>
-                        <option value="OCS">OCS (Station Commander Node)</option>
-                        {% if current_user.role == 'Administrator' %}
-                        <option value="Administrator">Administrator (Root Sysop Engine)</option>
-                        {% endif %}
-                    </select>
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Department Allocation</label>
-                    <input type="text" name="department" placeholder="e.g. Criminal Investigation" class="w-full p-3 border rounded-lg bg-black font-sans outline-none luxury-input text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Email Comms Mapping</label>
-                    <input type="email" name="email" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs">
-                </div>
-                <div>
-                    <label class="block font-black text-gray-500 mb-1 tracking-wide">Jurisdiction Command Base</label>
-                    <select name="station_id" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                        <option value="">-- No Local Node Assignment (Global Root) --</option>
-                        {% for st in stations %}
-                        <option value="{{ st.id }}">{{ st.name }} [{{ st.code }}]</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit" class="md:col-span-4 bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg uppercase tracking-widest hover:opacity-90 text-xs transition-all duration-200 shadow-xl mt-2">
-                    Provision Account Credentials Block and Append onto Roster
-                </button>
-            </form>
-        </div>
-        
-        <div class="bg-black border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
-            <div class="bg-luxury-navy p-4 text-white font-black text-xs uppercase tracking-widest border-b border-matteGold/20">
-                👮 Operational Police Force Roster Schema Map View
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead class="bg-gray-50 text-[10px] uppercase text-gray-400 border-b tracking-wider">
-                        <tr class="divide-x divide-gray-100">
-                            <th class="p-4">Service Token ID</th>
-                            <th class="p-4">Rank & Name Parameters</th>
-                            <th class="p-4">RBAC Access Boundary Role</th>
-                            <th class="p-4">Department & Station Base</th>
-                            <th class="p-4">Access State</th>
-                            {% if current_user.role == 'Administrator' %}
-                            <th class="p-4 text-center">Root Actions</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 font-sans text-gray-700">
-                        {% for o in officers %}
-                        <tr class="hover:bg-gray-50/80 divide-x divide-gray-50 transition-all duration-150">
-                            <td class="p-4 font-mono font-extrabold text-mediumblue text-[11px] tracking-wider">{{ o.service_number }}</td>
-                            <td class="p-4 font-bold text-gray-900 text-xs">{{ o.rank }} {{ o.full_name }}</td>
-                            <td class="p-4 font-mono font-black text-[10px] uppercase text-indigo-900 tracking-wide">{{ o.role }}</td>
-                            <td class="p-4 font-medium space-y-0.5 text-xs">
-                                <span class="block text-mediumblue font-bold">📍 {% if o.station %}{{ o.station.name }}{% else %}Global Command Hub Node{% endif %}</span>
-                                <span class="block text-[11px] text-gray-400 font-mono">Dept: {{ o.department or 'General Operations Roster' }}</span>
-                            </td>
-                            <td class="p-4">
-                                <span class="px-2.5 py-1 rounded-full text-[9px] font-mono font-black uppercase border shadow-sm
-                                           {% if o.is_active %} bg-emerald-50 text-emerald-800 border-emerald-300 {% else %} bg-red-50 text-red-800 border-red-300 {% endif %}">
-                                    {% if o.is_active %} CLEARANCE ACTIVE {% else %} SUSPENDED REJECTED {% endif %}
-                                </span>
-                            </td>
-                            {% if current_user.role == 'Administrator' %}
-                            <td class="p-4 text-center font-mono">
-                                <form method="POST" class="inline">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="action_flag" value="toggle_status">
-                                    <input type="hidden" name="target_user_id" value="{{ o.id }}">
-                                    <button type="submit" class="text-[9px] font-black uppercase px-3 py-1.5 bg-gray-100 border border-black hover:bg-luxury-navy hover:text-white hover:border-matteGold/30 rounded-lg transition-all shadow-sm">
-                                        Toggle Access Boundary Keys
-                                    </button>
-                                </form>
-                            </td>
-                            {% endif %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    """
-    return generate_nps_response(html, stations=stations, officers=officers)
+    suspects = Suspect.query.order_by(Suspect.full_name.asc()).all()
+    return render_template('suspect_registry.html', suspects=suspects, form=form)
 
-@app.route('/reports', methods=['GET', 'POST'])
+
+# --- OFFICERS & STATIONS MANAGEMENT ---
+
+@app.route('/officers', methods=['GET', 'POST'])
 @login_required
-def reports():
-    if request.method == 'POST':
-        export_format = request.form.get('export_format', 'excel')
+@role_required(['Administrator'])
+def officer_registry():
+    form = OfficerForm()
+    form.station_id.choices = [(s.id, s.name) for s in Station.query.order_by(Station.name.asc()).all()]
+    if form.validate_on_submit():
+        if User.query.filter_by(email=form.email.data).first():
+            flash("Account operational criteria conflict: Email exists.", "danger")
+            return redirect(url_for('officer_registry'))
+            
+        user = User(email=form.email.data, role=form.role.data)
+        user.set_password(form.password.data)
+        db.session.add(user)
+        db.session.flush()
         
-        if current_user.role == 'Administrator':
-            entries = OBEntry.query.order_by(OBEntry.id.asc()).all()
-        else:
-            entries = OBEntry.query.filter_by(station_id=current_user.station_id).order_by(OBEntry.id.asc()).all()
-            
-        if export_format == 'excel':
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "NPS Crime Analytics Statistics Matrix"
-            
-            headers = ["OB Unique Code ID", "Filing Timestamp", "Station Unit Jurisdiction", "Complainant Legal Name", "National ID Token", "Crime Category Classification", "Lifecycle State Phase", "Reporting Force Agent Token"]
-            ws.append(headers)
-            
-            for item in entries:
-                ws.append([
-                    item.ob_number,
-                    item.created_at.strftime('%Y-%m-%d %H:%M:%S'),
-                    item.station.name,
-                    item.complainant_name,
-                    item.national_id,
-                    item.crime_category,
-                    item.status,
-                    item.reporting_officer.service_number
-                ])
-                
-            for col in ws.columns:
-                max_len = max(len(str(cell.value or '')) for cell in col)
-                col_letter = openpyxl.utils.get_column_letter(col[0].column)
-                ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
-                
-            out = BytesIO()
-            wb.save(out)
-            out.seek(0)
-            
-            commit_audit("Compiled and outputted full spreadsheet analytics trace tracking mapping matrix.")
-            return Response(out.read(), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                            headers={'Content-Disposition': 'attachment; filename=NPS_Crime_Statistical_Report_Matrix_2026.xlsx'})
-                            
-    html = """
-    <div class="space-y-6 font-mono text-xs max-w-xl mx-auto mt-6 bg-black p-6 border border-matteGold/15 rounded-xl luxury-card">
-        <h2 class="text-sm font-black uppercase text-white border-b border-matteGold/10 pb-2 mb-4 tracking-widest text-center">
-            📊 Statistical Data Extraction Pipeline
-        </h2>
-        <p class="text-gray-500 font-sans leading-relaxed text-center">
-            Extract complete data boundaries from the active core ledger node. Outputs generate structured Excel files containing cryptographic compliance signatures.
-        </p>
-        <form method="POST" class="space-y-4 pt-4 border-t border-gray-100">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <div>
-                <label class="block font-black text-gray-500 mb-1 tracking-wide">Reporting Extraction Framework</label>
-                <select name="report_type" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                    <option value="daily">Daily Primary OB Analytical Trace Logs</option>
-                    <option value="weekly">Weekly Core Crime Progression Trends Matrix</option>
-                    <option value="monthly">Monthly National Crime Demographics Statistics Sheet</option>
-                    <option value="annual">Annual Macro-Penal Operational Review File Block</option>
-                    <option value="investigator">Internal Detective Performance Metric Index Matrix</option>
-                </select>
-            </div>
-            <div>
-                <label class="block font-black text-gray-500 mb-1 tracking-wide">Document Container Format</label>
-                <select name="export_format" class="w-full p-3 border rounded-lg bg-black outline-none luxury-input font-sans text-xs cursor-pointer">
-                    <option value="excel">Microsoft Excel Binary Spreadsheet (.xlsx)</option>
-                </select>
-            </div>
-            <button type="submit" class="w-full bg-luxury-navy text-white border border-matteGold/30 font-black p-4 rounded-lg text-xs uppercase tracking-widest shadow-xl transition-all duration-200 mt-2 hover:opacity-90">
-                Actuate Compilation Extraction Core
-            </button>
-        </form>
-    </div>
-    """
-    return generate_nps_response(html)
+        officer = Officer(
+            user_id=user.id,
+            station_id=form.station_id.data,
+            service_number=form.service_number.data,
+            rank=form.rank.data,
+            full_name=form.full_name.data,
+            department=form.department.data,
+            phone_number=form.phone_number.data
+        )
+        db.session.add(officer)
+        db.session.commit()
+        log_audit(f"OFFICER COMMISSIONED: Added Service Account {officer.service_number}")
+        flash("New Active Service Command Profile generated successfully.", "success")
+        return redirect(url_for('officer_registry'))
+        
+    officers = Officer.query.all()
+    return render_template('officer_registry.html', officers=officers, form=form)
+
+@app.route('/officers/<int:off_id>/toggle', methods=['POST'])
+@login_required
+@role_required(['Administrator'])
+def toggle_officer(off_id):
+    off = db.session.get(Officer, off_id)
+    if off and off.user_id != current_user.id:
+        off.user.is_active = not off.user.is_active
+        db.session.commit()
+        log_audit(f"OFFICER STATUS MUTATION: Account identity toggled for ID {off.service_number}")
+        flash("Identity execution credentials access mapped successfully.", "success")
+    return redirect(url_for('officer_registry'))
 
 @app.route('/audit-logs')
 @login_required
-def audit_logs():
-    if current_user.role != 'Administrator': abort(403)
-    logs = AuditLog.query.order_by(AuditLog.id.desc()).limit(250).all()
-    html = """
-    <div class="space-y-4">
-        <h1 class="text-xl font-black text-mediumblue font-mono uppercase tracking-widest border-b pb-3 border-matteGold/20">
-            🛡️ Session Security Ledger Audit Logs
-        </h1>
-        <div class="bg-black border border-matteGold/10 rounded-xl luxury-card overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-left font-mono text-[11px] border-collapse">
-                    <thead class="bg-luxury-navy text-white uppercase text-[9px] tracking-widest border-b border-matteGold/20">
-                        <tr class="divide-x divide-matteGold/10">
-                            <th class="p-3">System Clock Timestamp</th>
-                            <th class="p-3">Validated Actor Node Identity</th>
-                            <th class="p-3">Origin Network IP Addr</th>
-                            <th class="p-3">Executed Action Entry Description</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100 text-gray-700">
-                        {% for log in logs %}
-                        <tr class="hover:bg-gray-50/80 divide-x divide-gray-50 transition-all duration-100">
-                            <td class="p-3 text-gray-400 font-bold blackspace-nowrap">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }} UTC</td>
-                            <td class="p-3 font-bold text-indigo-950">{{ log.user_identifier }}</td>
-                            <td class="p-3 text-rose-950 font-semibold">{{ log.ip_address }}</td>
-                            <td class="p-3 text-gray-800 font-sans text-xs font-semibold">{{ log.action }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    """
-    return generate_nps_response(html, logs=logs)
+@role_required(['Administrator', 'OCS'])
+def view_audit_logs():
+    st_id = current_user.officer.station_id
+    if current_user.role == 'Administrator':
+        logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).limit(500).all()
+    else:
+        logs = AuditLog.query.filter_by(station_id=st_id).order_by(AuditLog.timestamp.desc()).limit(200).all()
+    return render_template('audit_logs.html', logs=logs)
 
-# 6. SYSTEM SEEDING & COLD-BOOT PIPELINE INITIALIZATION
+
+# --- FASTAPI REST ROUTING SUBSYSTEM ---
+
+router = APIRouter(prefix="/api/v1/police", tags=["National Police Management REST Components"])
+
+class BookingPayload(BaseModel):
+    prisoner_number: str
+    full_name: str
+    dob: date
+    gender: str
+    arresting_officer: str
+    ob_number: str
+    cell_id: int
+    bed_number: str
+
+@router.post("/custody/book-prisoner", status_code=fastapi_status.HTTP_201_CREATED)
+def process_prisoner_booking(payload: BookingPayload, db_session: Session = Depends(lambda: db.session)):
+    cell = db_session.query(Cell).filter(Cell.id == payload.cell_id).first()
+    if not cell:
+        raise HTTPException(status_code=404, detail="The designated cell assignment target was not found.")
+        
+    if cell.current_occupancy >= cell.capacity:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_400_BAD_REQUEST, 
+            detail=f"Capacity Alert: Target Cell {cell.cell_number} is full ({cell.current_occupancy}/{cell.capacity})."
+        )
+        
+    new_prisoner = Prisoner(**payload.dict(), custody_status="In Custody")
+    cell.current_occupancy += 1
+    if cell.current_occupancy >= cell.capacity:
+        cell.status = CellStatus.FULL
+    else:
+        cell.status = CellStatus.OCCUPIED
+        
+    db_session.add(new_prisoner)
+    db_session.commit()
+    return {"status": "Success", "message": "Prisoner registered and safely assigned to holding space allocation."}
+
+@router.post("/custody/release-prisoner/{prisoner_id}")
+def process_prisoner_release(prisoner_id: int, authorizing_officer: str, reason: str, db_session: Session = Depends(lambda: db.session)):
+    prisoner = db_session.query(Prisoner).filter(Prisoner.id == prisoner_id).first()
+    if not prisoner:
+        raise HTTPException(status_code=404, detail="Targeted detainee reference index not found.")
+        
+    unreturned_items = db_session.query(PrisonerProperty).filter(
+        PrisonerProperty.prisoner_id == prisoner_id,
+        PrisonerProperty.return_status == False
+    ).count()
+    
+    if unreturned_items > 0:
+        raise HTTPException(
+            status_code=fastapi_status.HTTP_400_BAD_REQUEST,
+            detail=f"Release Denied: Detainee has {unreturned_items} unreturned property items in inventory storage."
+        )
+
+    prisoner.custody_status = "Released"
+    if prisoner.cell:
+        prisoner.cell.current_occupancy = max(0, prisoner.cell.current_occupancy - 1)
+        prisoner.cell.status = CellStatus.AVAILABLE if prisoner.cell.current_occupancy < prisoner.cell.capacity else CellStatus.FULL
+
+    new_release = ReleaseRecord(
+        release_number=f"REL-{prisoner.prisoner_number}",
+        prisoner_id=prisoner.id,
+        release_reason=reason,
+        authorizing_officer=authorizing_officer,
+        property_returned_status=True
+    )
+    db_session.add(new_release)
+    db_session.commit()
+    return {"status": "Success", "message": "Detainee properties cleared and release documentation initialized."}
+
+
+# --- REPORT ENGINE AND PDF COMPILER UTILITIES ---
+
+@app.route('/reports')
+@login_required
+def reports_dashboard():
+    return render_template('reports.html')
+
+@app.route('/reports/export/excel')
+@login_required
+def export_excel_report():
+    st_id = current_user.officer.station_id
+    query = OBEntry.query if current_user.role == 'Administrator' else OBEntry.query.filter_by(station_id=st_id)
+    entries = query.order_by(OBEntry.created_at.desc()).all()
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Station Occurrence Book Digest"
+    
+    headers = ["OB Number", "Timestamp", "Complainant Name", "National ID", "Category", "Incident Location", "Status"]
+    ws.append(headers)
+    
+    for entry in entries:
+        ws.append([
+            entry.ob_number,
+            entry.created_at.strftime('%Y-%m-%d %H:%M'),
+            entry.complainant_name,
+            entry.national_id,
+            entry.crime_category,
+            entry.incident_location,
+            entry.status
+        ])
+        
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    log_audit("REPORT COMPILED: Exported Comprehensive Excel Dataset Ledger")
+    return send_file(output, download_name=f"OB_Ledger_{date.today()}.xlsx", as_attachment=True, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+@app.route('/ob/<int:entry_id>/abstract-pdf')
+@login_required
+def export_abstract_pdf(entry_id):
+    entry = db.session.get(OBEntry, entry_id)
+    if not entry or (current_user.role != 'Administrator' and entry.station_id != current_user.officer.station_id):
+        abort(404)
+        
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
+    story = []
+    
+    styles = getSampleStyleSheet()
+    
+    title_style = ParagraphStyle(
+        'DocTitle', parent=styles['Heading1'],
+        fontName='Helvetica-Bold', fontSize=18, leading=22,
+        textColor=colors.HexColor('#0B132B'), alignment=1, spaceAfter=6
+    )
+    subtitle_style = ParagraphStyle(
+        'DocSub', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=10, leading=14,
+        textColor=colors.HexColor('#E5A93C'), alignment=1, spaceAfter=15
+    )
+    section_heading = ParagraphStyle(
+        'SectionHeading', parent=styles['Heading2'],
+        fontName='Helvetica-Bold', fontSize=12, leading=16,
+        textColor=colors.HexColor('#1C2541'), spaceBefore=12, spaceAfter=6
+    )
+    body_style = ParagraphStyle(
+        'TableBody', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=10, leading=14,
+        textColor=colors.HexColor('#000000') # Solid black dashboard text rules preserved
+    )
+    bold_body_style = ParagraphStyle(
+        'TableBodyBold', parent=body_style,
+        fontName='Helvetica-Bold'
+    )
+
+    story.append(Paragraph("POLICE SERVICE DEPLOYMENT PORTAL", title_style))
+    story.append(Paragraph(f"OFFICIAL OCCURRENCE BOOK ABSTRACT // STATION: {entry.station.name.upper()}", subtitle_style))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("1. CASE METRICS & TRACKING REFERENCE", section_heading))
+    meta_data = [
+        [Paragraph("Occurrence Book Num:", bold_body_style), Paragraph(entry.ob_number, body_style)],
+        [Paragraph("Registration Date/Time:", bold_body_style), Paragraph(entry.created_at.strftime('%Y-%m-%d %H:%M UTC'), body_style)],
+        [Paragraph("Operational Status:", bold_body_style), Paragraph(entry.status, body_style)],
+        [Paragraph("Crime Classification:", bold_body_style), Paragraph(entry.crime_category, body_style)]
+    ]
+    t1 = Table(meta_data, colWidths=[150, 380])
+    t1.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8F9FA')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('PADDING', (0,0), (-1,-1), 6),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+    ]))
+    story.append(t1)
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("2. COMPLAINANT STATEMENT DATA MATRIX", section_heading))
+    complainant_data = [
+        [Paragraph("Full Name:", bold_body_style), Paragraph(entry.complainant_name, body_style)],
+        [Paragraph("National ID/Passport ID:", bold_body_style), Paragraph(entry.national_id, body_style)],
+        [Paragraph("Contact Number:", bold_body_style), Paragraph(entry.phone_number, body_style)],
+        [Paragraph("Residential Address:", bold_body_style), Paragraph(entry.address, body_style)]
+    ]
+    t2 = Table(complainant_data, colWidths=[150, 380])
+    t2.setStyle(TableStyle([
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('PADDING', (0,0), (-1,-1), 6),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+    ]))
+    story.append(t2)
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("3. DETAILED NARRATIVE DEPOSITION & EVIDENCE INCIDENT REPORT", section_heading))
+    narrative_p = Paragraph(entry.narrative_statement, body_style)
+    t3 = Table([[narrative_p]], colWidths=[530])
+    t3.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8F9FA')),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+        ('PADDING', (0,0), (-1,-1), 10),
+    ]))
+    story.append(t3)
+    story.append(Spacer(1, 15))
+
+    qr_data = f"OB_VERIFY:{entry.ob_number}|STATION:{entry.station.code}|STATUS:{entry.status}"
+    qr = qrcode.QRCode(version=1, box_size=3, border=1)
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="black", back_color="white")
+    
+    qr_bytes = io.BytesIO()
+    qr_img.save(qr_bytes, format='PNG')
+    qr_bytes.seek(0)
+    rl_qr_img = RLImage(qr_bytes, width=70, height=70)
+
+    sig_text = f"Compiled By: {entry.recording_officer.rank} {entry.recording_officer.full_name}<br/>Service Number: {entry.recording_officer.service_number}<br/>Generated On: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}"
+    footer_table_data = [
+        [Paragraph(sig_text, body_style), rl_qr_img]
+    ]
+    footer_table = Table(footer_table_data, colWidths=[450, 80])
+    footer_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('ALIGN', (1,0), (1,0), 'RIGHT'),
+    ]))
+    
+    story.append(KeepTogether([
+        Spacer(1, 10),
+        Paragraph("4. SECURE VERIFICATION FOOTPRINT", section_heading),
+        footer_table
+    ]))
+
+    doc.build(story)
+    buffer.seek(0)
+    log_audit(f"PDF GENERATED: Abstract compiled for {entry.ob_number}")
+    return send_file(buffer, download_name=f"Abstract_{entry.ob_number.replace('/', '_')}.pdf", as_attachment=True, mimetype="application/pdf")
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        
-        if not Station.query.first():
-            s1 = Station(name="Nyeri Central Police Station", code="NPS-NYR-CENT")
-            s2 = Station(name="Karatina Police Station", code="NPS-NYR-KRTN")
-            s3 = Station(name="Othaya Police Station", code="NPS-NYR-OTHY")
-            s4 = Station(name="Mukurweini Police Station", code="NPS-NYR-MKWN")
-            s5 = Station(name="Nanyuki Police Station", code="NPS-LKP-NYNK")
-            db.session.add_all([s1, s2, s3, s4, s5])
-            db.session.commit()
-            
-            admin_seed = User(
-                service_number="KP-ADMIN",
-                password_hash=generate_password_hash("NpsPassAdmin2026!"),
-                full_name="System Infrastructure Controller",
-                rank="Commissioner",
-                role="Administrator",
-                department="Directorate of Technology Communications",
-                email="admin.core@nps.go.ke",
-                phone="+254711000000",
-                station_id=s1.id,
-                is_active=True
-            )
-            desk_seed = User(
-                service_number="KP-DESK",
-                password_hash=generate_password_hash("DeskPass123!"),
-                full_name="Sgt. Benson Mariga",
-                rank="Sergeant",
-                role="Desk Officer",
-                department="General Station Duties Desk",
-                email="b.mariga@nps.go.ke",
-                phone="+254711111111",
-                station_id=s1.id,
-                is_active=True
-            )
-            invest_seed = User(
-                service_number="KP-INVEST",
-                password_hash=generate_password_hash("InvestPass123!"),
-                full_name="IP. Jane Muthoni",
-                rank="Inspector",
-                role="Investigator",
-                department="Directorate of Criminal Investigations (DCI)",
-                email="j.muthoni@nps.go.ke",
-                phone="+254722222222",
-                station_id=s1.id,
-                is_active=True
-            )
-            ocs_seed = User(
-                service_number="KP-OCS",
-                password_hash=generate_password_hash("OcsPass123!"),
-                full_name="SACP. David Kimaiyo",
-                rank="Chief Inspector",
-                role="OCS",
-                department="Station Executive Administration Command",
-                email="d.kimaiyo@nps.go.ke",
-                phone="+254733333333",
-                station_id=s1.id,
-                is_active=True
-            )
-            
-            db.session.add_all([admin_seed, desk_seed, invest_seed, ocs_seed])
-            db.session.commit()
-            
-            sus1 = Suspect(full_name="Kamau John Mwangi", national_id="32456789", date_of_birth="1992-04-12", gender="Male", address="Kamakwa Area, Nyeri Base", phone_number="+254700123456", arrest_history_summary="Prior felony history tracked under trace mapping indices for burglary infractions.")
-            sus2 = Suspect(full_name="Fatuma Ali Ibrahim", national_id="29485761", date_of_birth="1995-11-23", gender="Female", address="Majengo Settlement, Block C", phone_number="+254711987654", arrest_history_summary="Suspicion tracking logs regarding wire transfer discrepancies.")
-            db.session.add_all([sus1, sus2])
-            db.session.commit()
-            
-# --- BULK DATA INSERTION FEATURE ---
-@app.route('/seed_test_data')
-@login_required
-def seed_test_data():
-    # Only allow Administrators to perform bulk data insertion
-    if current_user.role != 'Administrator':
-        flash("Unauthorized access: Administrator privileges required.", "danger")
-        return redirect(url_for('dashboard'))
-    
-    # Bulk insert 1,234 test records
-    try:
-        for i in range(1, 1235):
-            new_entry = OBEntry(
-                ob_number=f"OB-{20000 + i}",
-                complainant_name=f"Test Citizen {i}",
-                crime_category="Investigation",
-                narrative=f"System stress test entry number {i}. Generated for operational validation.",
-                status="Pending",
-                station_id=1
-            )
-            db.session.add(new_entry)
-        
-        db.session.commit()
-        return f"Successfully committed 1,234 test records to the DPOB Ledger."
-    except Exception as e:
-        db.session.rollback()
-        return f"An error occurred during bulk insertion: {str(e)}"
-
-# --- APPLICATION EXECUTION ---
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(debug=True)
