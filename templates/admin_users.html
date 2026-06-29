@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NPS Admin - Manage Personnel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #0B192C; color: #000000; }
+        .navbar-custom { background-color: #1E2A38; border-bottom: 2px solid #00D2C4; }
+        .admin-panel { background-color: #FFFFFF; border-radius: 6px; padding: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .text-light-custom { color: #FFFFFF !important; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark navbar-custom px-4">
+        <span class="navbar-brand mb-0 h1 text-light-custom">HR Admin Core Dashboard | Identity Access Management</span>
+        <a href="/dashboard" class="btn btn-sm btn-outline-light">Return to Dashboard</a>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="admin-panel text-dark">
+                    <h5 class="fw-bold mb-3">Provision Station Personnel Node</h5>
+                    <form action="/admin/users" method="POST">
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Official Service Number</label>
+                            <input type="text" name="service_number" class="form-control form-control-sm" placeholder="e.g. NPS/SO/8472" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Personnel Full Name</label>
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="First Last" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Designated Professional Rank</label>
+                            <input type="text" name="rank" class="form-control form-control-sm" placeholder="e.g. Inspector, Sergeant" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Assigned Command Base Station</label>
+                            <input type="text" name="station" class="form-control form-control-sm" placeholder="e.g. Limuru Police Station" required>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Security Access Architecture Role</label>
+                            <select name="role" class="form-select form-select-sm" required>
+                                <option value="Officer">Officer (OB Entry Only)</option>
+                                <option value="Investigator">Investigator (Full Case Files Management)</option>
+                                <option value="Admin">System Administrator</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small mb-1">Temporary Initial Access Key Password</label>
+                            <input type="password" name="password" class="form-control form-control-sm" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-sm w-100 text-white fw-bold">Compile Personnel Profile</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="admin-panel text-dark">
+                    <h5 class="fw-bold mb-3">Active Personnel Roster Directory Ledger</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped table-hover mt-2 align-middle">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Service Num</th>
+                                    <th>Personnel Name</th>
+                                    <th>Rank Metric</th>
+                                    <th>Station Bounds</th>
+                                    <th>System Role Authorization</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users %}
+                                <tr>
+                                    <td><strong class="font-monospace">{{ user.service_number }}</strong></td>
+                                    <td>{{ user.name }}</td>
+                                    <td><span class="badge bg-secondary">{{ user.rank }}</span></td>
+                                    <td>{{ user.station }}</td>
+                                    <td>
+                                        <span class="badge {% if user.role == 'Investigator' %}bg-info text-dark{% elif user.role == 'Admin' %}bg-warning text-dark{% else %}bg-dark text-light-custom{% endif %}">
+                                            {{ user.role }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-3">No auxiliary personnel accounts registered on terminal.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
