@@ -2,45 +2,69 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NPS - Log New Occurrence</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPS - Log New Incident</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
-        body { background-color: #0B192C; color: #FFFFFF; }
-        .form-card { background-color: #1E2A38; border-radius: 8px; padding: 25px; border: 1px solid #00D2C4; }
+        body { background-color: #0f1115; color: #ffffff; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .system-top-banner { background-color: #11141a; border-bottom: 1px solid #2d323f; padding: 15px 30px; }
+        .sidebar-panel { background-color: #11141a; border-right: 1px solid #2d323f; min-height: calc(100vh - 73px); padding: 25px 20px; }
+        .sidebar-section-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; font-weight: 700; margin-bottom: 15px; margin-top: 25px; }
+        .sidebar-link { display: flex; align-items: center; color: #94a3b8; text-decoration: none; padding: 10px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+        .sidebar-link i { margin-right: 10px; font-size: 1rem; }
+        .sidebar-link:hover, .sidebar-link.active { background-color: #1b1f27; color: #ffffff; border-left: 3px solid #00d2c4; }
+        .workspace-canvas { padding: 30px; }
+        .module-card { background-color: #1b1f27; border: 1px solid #2d323f; border-radius: 8px; padding: 25px; }
+        .form-label-custom { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 600; }
+        .input-custom { background-color: #252b36 !important; border: 1px solid #3f4756 !important; color: #ffffff !important; border-radius: 6px; padding: 12px; }
+        .btn-action-commit { background-color: #11141a; border: 1px solid #3f4756; color: #ffffff; text-transform: uppercase; letter-spacing: 1px; font-size: 0.78rem; font-weight: bold; padding: 14px; border-radius: 6px; transition: all 0.2s; }
+        .btn-action-commit:hover { background-color: #00d2c4; color: #0b192c; border-color: #00d2c4; }
     </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="form-card">
-                    <h4 class="mb-3">Official Occurrence Book (OB) Entry Logging Form</h4>
-                    <p class="text-muted small">Ensure accuracy. Entries committed here generate standard legal records immediately.</p>
-                    <hr class="border-secondary">
-                    <form action="/ob/register" method="POST">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label class="form-label small">Complainant / Reporter Full Name</label>
-                                <input type="text" name="complainant_name" class="form-control bg-dark text-white border-secondary" required>
+    <div class="system-top-banner d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-0 fw-bold text-white small" style="letter-spacing: 0.5px;">NATIONAL POLICE SERVICE — REPUBLIC OF KENYA</h5>
+            <span class="text-muted" style="font-size: 0.7rem; letter-spacing: 0.5px;">DIGITAL OCCURRENCE BOOK INTAKE MODULE</span>
+        </div>
+    </div>
+    <div class="container-fluid mx-0 px-0">
+        <div class="row g-0">
+            <div class="col-md-2 mx-0 px-0">
+                <div class="sidebar-panel">
+                    <div class="sidebar-section-title">Operations Command</div>
+                    <a href="/dashboard" class="sidebar-link"><i class="bi bi-speedometer2"></i> Operations Dashboard</a>
+                    <a href="/ob/view" class="sidebar-link active"><i class="bi bi-book"></i> Occurrence Book (OB)</a>
+                    <a href="/cases" class="sidebar-link"><i class="bi bi-person-exclamation"></i> Suspect Intelligence Registry</a>
+                    <div class="sidebar-section-title">Intelligence & Reports</div>
+                    <a href="/reports" class="sidebar-link"><i class="bi bi-bar-chart-line"></i> Statistical Analytics Hub</a>
+                </div>
+            </div>
+            <div class="col-md-10 mx-0 px-0">
+                <div class="workspace-canvas">
+                    <div class="module-card">
+                        <h5 class="text-white mb-4"><i class="bi bi-pencil-square text-info"></i> Execute Real-Time Incident Logging Intake Form</h5>
+                        <form action="/ob/register" method="POST">
+                            <div class="mb-3">
+                                <label class="form-label form-label-custom">Complainant Full Name</label>
+                                <input type="text" name="complainant_name" class="form-control input-custom" required>
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label small">Contact Mobile Number</label>
-                                <input type="text" name="complainant_phone" class="form-control bg-dark text-white border-secondary" required>
+                            <div class="mb-3">
+                                <label class="form-label form-label-custom">Complainant Contact Phone Line</label>
+                                <input type="text" name="complainant_phone" class="form-control input-custom" required>
                             </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label small">Nature of Offence / Incident Type</label>
-                            <input type="text" name="nature_of_offence" class="form-control bg-dark text-white border-secondary" placeholder="e.g. Assault, Burglary, Missing Person" required>
-                        </div>
-                        <div class="mb-4">
-                            <label class="form-label small">Detailed Statement / Fact Narrative</label>
-                            <textarea name="details" class="form-control bg-dark text-white border-secondary" rows="5" required></textarea>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <a href="/dashboard" class="btn btn-outline-secondary text-white">Cancel & Return</a>
-                            <button type="submit" class="btn btn-success px-4 text-white">Commit Log Entry</button>
-                        </div>
-                    </form>
+                            <div class="mb-3">
+                                <label class="form-label form-label-custom">Nature of Offence Metric Class</label>
+                                <input type="text" name="nature_of_offence" class="form-control input-custom" placeholder="e.g. Assault, Burglary, Traffic Violation" required>
+                            </div>
+                            <div class="mb-4">
+                                <label class="form-label form-label-custom">Statement Descriptive Narrative Details</label>
+                                <textarea name="details" class="form-control input-custom" rows="6" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-action-commit w-100">Commit Record Entry Block onto Station Ledger</button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
