@@ -428,15 +428,25 @@ def download_abstract(id):
     log_audit(f"Compiled signature abstract PDF mapping token {entry.ob_number}")
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename, as_attachment=True)
 
+# --- NORMALIZED COMPREHENSIVE PUBLIC TRACKING ROUTES ---
 @app.route('/public_track', methods=['GET', 'POST'])
-def public_track():
-    entry = None
+@app.route('/public-portal', methods=['GET', 'POST'])
+def public_portal():
+    search_result = None
     searched = False
+    ob_num = ""
+    
     if request.method == 'POST':
-        ob_num = request.form['ob_number'].strip()
-        entry = OBEntry.query.filter_by(ob_number=ob_num).first()
+        ob_num = request.form.get('ob_number', '').strip()
+        if ob_num:
+            search_result = OBEntry.query.filter_by(ob_number=ob_num).first()
         searched = True
-    return render_template('public_track.html', entry=entry, searched=searched)
+        
+    # Standardizes matching rendering to look for either public_portal.html or public_track.html fallback safely
+    try:
+        return render_template('public_portal.html', entry=search_result, result=search_result, ob_number=ob_num, searched=searched)
+    except Exception:
+        return render_template('public_track.html', entry=search_result, result=search_result, ob_number=ob_num, searched=searched)
 
 @app.route('/suspects', methods=['GET', 'POST'])
 @login_required
