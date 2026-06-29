@@ -15,8 +15,10 @@
         .sidebar-link i { margin-right: 10px; font-size: 1rem; }
         .sidebar-link:hover, .sidebar-link.active { background-color: #1b1f27; color: #ffffff; border-left: 3px solid #00d2c4; }
         .workspace-canvas { padding: 30px; }
-        .case-block-card { background-color: #1b1f27; border: 1px solid #2d323f; border-radius: 8px; padding: 25px; border-left: 4px solid #ea580c; margin-bottom: 20px; color: #cbd5e1; }
-        .input-custom { background-color: #252b36 !important; border: 1px solid #3f4756 !important; color: #ffffff !important; border-radius: 4px; padding: 6px 12px; font-size: 0.85rem; }
+        .case-block-card { background-color: #1b1f27; border: 1px solid #2d323f; border-radius: 8px; padding: 25px; margin-bottom: 25px; }
+        .input-custom { background-color: #252b36 !important; border: 1px solid #3f4756 !important; color: #ffffff !important; border-radius: 6px; padding: 10px; font-size: 0.85rem; }
+        .suspect-thumbnail { width: 90px; height: 90px; border-radius: 6px; border: 1px solid #3f4756; object-fit: cover; background-color: #11141a; }
+        .camera-box { width: 100%; max-width: 240px; height: 180px; background-color: #11141a; border: 1px solid #3f4756; border-radius: 6px; }
     </style>
 </head>
 <body>
@@ -38,44 +40,108 @@
                     <a href="/reports" class="sidebar-link"><i class="bi bi-bar-chart-line"></i> Statistical Analytics Hub</a>
                 </div>
             </div>
+
             <div class="col-md-10 mx-0 px-0">
                 <div class="workspace-canvas">
                     <h5 class="text-white mb-4"><i class="bi bi-incognito text-danger"></i> Active Incident Case Files Pending Investigation Action</h5>
                     
                     {% for entry in entries %}
                     <div class="case-block-card">
-                        <div class="row align-items-center">
-                            <div class="col-md-4">
-                                <span class="text-muted small d-block">LEDGER LOG REFERENCE NUMBER</span>
-                                <strong class="text-info font-monospace" style="font-size: 1.1rem;">{{ entry.ob_number }}</strong>
-                                <span class="d-block small mt-1 text-secondary">Logged By Officer: {{ entry.recorded_by }}</span>
-                            </div>
-                            <div class="col-md-4">
-                                <span class="text-muted small d-block">OFFENCE VECTOR PARAMETER</span>
-                                <span class="badge bg-danger mt-1">{{ entry.nature_of_offence }}</span>
-                                <p class="small text-truncate mt-2 mb-0" style="max-width: 250px;">{{ entry.details }}</p>
-                            </div>
-                            <div class="col-md-4">
-                                <form action="/cases/update/{{ entry.id }}" method="POST">
-                                    <span class="text-muted small d-block mb-1">AMEND SYSTEM EXECUTION BOUNDARY</span>
-                                    <div class="input-group">
-                                        <select name="status" class="form-select input-custom">
-                                            <option value="Under Investigation" selected>Under Investigation</option>
-                                            <option value="Forwarded to ODPP">Forwarded to ODPP</option>
-                                            <option value="Closed / Concluded">Closed / Concluded</option>
-                                        </select>
-                                        <button type="submit" class="btn btn-sm btn-dark border-secondary text-white">Update</button>
+                        <div class="row g-3">
+                            <div class="col-md-2 text-center border-end border-secondary">
+                                {% if entry.suspect_photo %}
+                                    <img src="{{ entry.suspect_photo }}" class="suspect-thumbnail mb-2" alt="Suspect">
+                                {% else %}
+                                    <div class="suspect-thumbnail d-flex align-items-center justify-content-center mx-auto mb-2 text-muted">
+                                        <i class="bi bi-person-bounding-box h3 mb-0"></i>
                                     </div>
+                                {% endif %}
+                                <span class="d-block small text-muted font-monospace">{{ entry.ob_number }}</span>
+                            </div>
+
+                            <div class="col-md-4">
+                                <span class="badge bg-danger mb-2">{{ entry.nature_of_offence }}</span>
+                                <h6 class="text-white mb-1">Complainant: {{ entry.complainant_name }}</h6>
+                                <p class="small text-muted mb-2">{{ entry.details }}</p>
+                                {% if entry.evidence_file %}
+                                    <div class="text-success small"><i class="bi bi-file-earmark-check-fill"></i> Document Attachment Logged</div>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-3 border-start border-end border-secondary px-3">
+                                <form action="/cases/upload-evidence/{{ entry.id }}" method="POST" enctype="multipart/form-data">
+                                    <label class="text-muted small d-block mb-1 text-uppercase">Log Files & Evidence Artifacts</label>
+                                    <input type="file" name="evidence_document" class="form-control input-custom mb-2">
+                                    
+                                    <input type="hidden" name="camera_snapshot_data" id="camera_input_{{ entry.id }}">
+                                    <button type="button" class="btn btn-sm btn-outline-info w-100 mb-2" onclick="initializeCamera('{{ entry.id }}')">
+                                        <i class="bi bi-camera"></i> Initialize Laptop Camera
+                                    </button>
+                                    <div class="d-none" id="camera_area_{{ entry.id }}">
+                                        <video id="video_{{ entry.id }}" class="camera-box mb-1" autoplay></video>
+                                        <button type="button" class="btn btn-xs btn-warning w-100 mb-2 py-1" onclick="captureSnapshot('{{ entry.id }}')">Snap Image Stream</button>
+                                    </div>
+                                    <button type="submit" class="btn btn-sm btn-success text-white w-100">Commit Binary Attachments</button>
+                                </form>
+                            </div>
+
+                            <div class="col-md-3">
+                                <label class="text-muted small d-block mb-2 text-uppercase">Execute Resolution Action</label>
+                                <form action="/cases/resolve/{{ entry.id }}" method="POST">
+                                    <select name="resolution_action" class="form-select input-custom mb-2" required>
+                                        <option value="" disabled selected>Select Settlement Target...</option>
+                                        <option value="innocent">Clear Charges (Prove Innocent)</option>
+                                        <option value="close">Resolve Case (Conclude Ledger)</option>
+                                        <option value="remove">Purge Suspect Record Entirely</option>
+                                    </select>
+                                    <input type="text" name="resolution_notes" class="form-control input-custom mb-2" placeholder="Input closing log notes..." required>
+                                    <button type="submit" class="btn btn-sm btn-danger w-100 text-white fw-bold">Execute Parameter Termination</button>
                                 </form>
                             </div>
                         </div>
                     </div>
                     {% else %}
-                    <div class="alert alert-dark bg-dark text-muted border-secondary py-5 text-center">No open cases inside current runtime database node ledger matrix bounds.</div>
+                        <div class="alert alert-dark bg-dark text-muted border-secondary py-5 text-center">No active suspect records tracked inside current operation matrix constraints.</div>
                     {% endfor %}
                 </div>
             </div>
         </div>
     </div>
+
+    <script>
+        function initializeCamera(id) {
+            const cameraArea = document.getElementById(`camera_area_${id}`);
+            const video = document.getElementById(`video_${id}`);
+            cameraArea.classList.remove('d-none');
+            
+            navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+                .then(function(stream) {
+                    video.srcObject = stream;
+                })
+                .catch(function(err) {
+                    alert("Hardware access blocked: Cannot engage workstation terminal webcam capture loop.");
+                });
+        }
+
+        function captureSnapshot(id) {
+            const video = document.getElementById(`video_${id}`);
+            const inputField = document.getElementById(`camera_input_${id}`);
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = 320;
+            canvas.height = 240;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const dataUrl = canvas.toDataURL('image/jpeg');
+            inputField.value = dataUrl;
+            
+            // Turn off camera streaming matrix safely to conserve device memory footprint
+            const stream = video.srcObject;
+            const tracks = stream.getTracks();
+            tracks.forEach(track => track.stop());
+            document.getElementById(`camera_area_${id}`).innerHTML = "<div class='alert alert-info py-1 small text-center'><i class='bi bi-check-circle-fill'></i> Frame Buffered Ready</div>";
+        }
+    </script>
 </body>
 </html>
