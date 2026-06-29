@@ -222,7 +222,18 @@ def audit_logs():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        # Seed an administrative account node automatically if the infrastructure is fresh
         if not Officer.query.filter_by(service_number='KP-ADMIN').first():
-            db.session.add(Officer(service_number='KP-ADMIN', password='adminpasscipher', name='Chief Superintendent Administrator', role='Admin'))
+            admin_node = Officer(
+                service_number='KP-ADMIN',
+                password='adminpasscipher',
+                name='Chief Superintendent Administrator',
+                role='Admin'
+            )
+            db.session.add(admin_node)
             db.session.commit()
-    app.run(debug=True)
+            
+    # FIX: Import 'os' to dynamically fetch the production port assigned by Render
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
