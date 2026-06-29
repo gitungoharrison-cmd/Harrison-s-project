@@ -2,120 +2,80 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NPS Terminal - Case Files</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPS - Case Investigations Matrix</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
-        body { background-color: #0B192C; color: #000000; }
-        .navbar-custom { background-color: #1E2A38; border-bottom: 2px solid #00D2C4; }
-        .case-card { background-color: #FFFFFF; border-left: 4px solid #00D2C4; border-radius: 6px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 25px; }
-        .text-light-custom { color: #FFFFFF !important; }
+        body { background-color: #0f1115; color: #ffffff; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .system-top-banner { background-color: #11141a; border-bottom: 1px solid #2d323f; padding: 15px 30px; }
+        .sidebar-panel { background-color: #11141a; border-right: 1px solid #2d323f; min-height: calc(100vh - 73px); padding: 25px 20px; }
+        .sidebar-section-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; font-weight: 700; margin-bottom: 15px; margin-top: 25px; }
+        .sidebar-link { display: flex; align-items: center; color: #94a3b8; text-decoration: none; padding: 10px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px; }
+        .sidebar-link i { margin-right: 10px; font-size: 1rem; }
+        .sidebar-link:hover, .sidebar-link.active { background-color: #1b1f27; color: #ffffff; border-left: 3px solid #00d2c4; }
+        .workspace-canvas { padding: 30px; }
+        .case-block-card { background-color: #1b1f27; border: 1px solid #2d323f; border-radius: 8px; padding: 25px; border-left: 4px solid #ea580c; margin-bottom: 20px; color: #cbd5e1; }
+        .input-custom { background-color: #252b36 !important; border: 1px solid #3f4756 !important; color: #ffffff !important; border-radius: 4px; padding: 6px 12px; font-size: 0.85rem; }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-dark navbar-custom px-4">
-        <span class="navbar-brand mb-0 h1 text-light-custom">Criminal Investigations Desk | Case Registry</span>
-        <a href="/dashboard" class="btn btn-sm btn-outline-light">Return to Dashboard</a>
-    </nav>
-
-    <div class="container mt-4">
-        <h3 class="mb-4 text-white">Active Case Investigation Files Matrix</h3>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show small py-2" role="alert">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        {% for case in cases %}
-        <div class="case-card text-dark">
-            <div class="row align-items-center">
-                <div class="col-md-4">
-                    <h5>Case Ref: <span class="text-primary font-monospace">{{ case.case_number }}</span></h5>
-                    <span class="text-muted small">Linked OB Reference: <strong>{{ case.ob_number }}</strong></span><br>
-                    <span class="badge bg-info text-dark mt-2">Status: {{ case.case_status }}</span>
-                </div>
-                
-                <div class="col-md-4 border-start border-end px-3">
-                    <form action="/cases/assign/{{ case.id }}" method="POST">
-                        <label class="form-label small fw-bold mb-1 text-dark">Assigned Lead Detective</label>
-                        <div class="input-group input-group-sm">
-                            <select name="investigator_id" class="form-select" required>
-                                <option value="">-- Unassigned Node --</option>
-                                {% for inv in investigators %}
-                                <option value="{{ inv.id }}" {% if case.investigator_id == inv.id %}selected{% endif %}>{{ inv.rank }} {{ inv.name }} ({{ inv.service_number }})</option>
-                                {% endfor %}
-                            </select>
-                            <button type="submit" class="btn btn-dark text-white btn-sm">Bind</button>
-                        </div>
-                    </form>
-                </div>
-
-                <div class="col-md-4">
-                    <form action="/cases/update/{{ case.id }}" method="POST">
-                        <div class="row g-1">
-                            <div class="col-6">
-                                <input type="text" name="suspect_name" class="form-control form-control-sm" placeholder="Suspect Name" value="{{ case.suspect_name or '' }}">
-                            </div>
-                            <div class="col-6">
-                                <input type="text" name="suspect_id" class="form-control form-control-sm" placeholder="ID / Passport" value="{{ case.suspect_id_passport or '' }}">
-                            </div>
-                            <div class="col-12 mt-1">
-                                <select name="status" class="form-select form-select-sm mb-1">
-                                    <option value="Under Investigation" {% if case.case_status == 'Under Investigation' %}selected{% endif %}>Under Investigation</option>
-                                    <option value="Forwarded to ODPP" {% if case.case_status == 'Forwarded to ODPP' %}selected{% endif %}>Forwarded to ODPP (Legal Review)</option>
-                                    <option value="Court Stage" {% if case.case_status == 'Court Stage' %}selected{% endif %}>Active Prosecution Court Stage</option>
-                                    <option value="Concluded" {% if case.case_status == 'Concluded' %}selected{% endif %}>Concluded / Archival</option>
-                                </select>
-                                <button type="submit" class="btn btn-sm btn-success w-100 text-white">Compile Metrics</button>
-                            </div>
-                        </div>
-                    </form>
+    <div class="system-top-banner d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="mb-0 fw-bold text-white small" style="letter-spacing: 0.5px;">NATIONAL POLICE SERVICE — REPUBLIC OF KENYA</h5>
+            <span class="text-muted" style="font-size: 0.7rem; letter-spacing: 0.5px;">CRIMINAL INVESTIGATION REGISTER VECTOR DISPATCH DESK</span>
+        </div>
+    </div>
+    <div class="container-fluid mx-0 px-0">
+        <div class="row g-0">
+            <div class="col-md-2 mx-0 px-0">
+                <div class="sidebar-panel">
+                    <div class="sidebar-section-title">Operations Command</div>
+                    <a href="/dashboard" class="sidebar-link"><i class="bi bi-speedometer2"></i> Operations Dashboard</a>
+                    <a href="/ob/view" class="sidebar-link"><i class="bi bi-book"></i> Occurrence Book (OB)</a>
+                    <a href="/cases" class="sidebar-link active"><i class="bi bi-person-exclamation"></i> Suspect Intelligence Registry</a>
+                    <div class="sidebar-section-title">Intelligence & Reports</div>
+                    <a href="/reports" class="sidebar-link"><i class="bi bi-bar-chart-line"></i> Statistical Analytics Hub</a>
                 </div>
             </div>
-
-            <div class="row mt-3 border-top pt-3">
-                <div class="col-md-6 border-end">
-                    <h6 class="fw-bold text-dark">Case Diary Milestone Tracking Logs</h6>
-                    <div class="bg-light p-2 rounded mb-2 style-scroll" style="max-height: 150px; overflow-y: auto;">
-                        {% for log in case.diary_entries %}
-                        <div class="border-bottom pb-1 mb-1 small text-dark">
-                            <span class="text-muted font-monospace text-dark">[{{ log.entry_date.strftime('%m/%d %H:%M') }} - IO: {{ log.recorded_by }}]</span><br>
-                            {{ log.activity_details }}
+            <div class="col-md-10 mx-0 px-0">
+                <div class="workspace-canvas">
+                    <h5 class="text-white mb-4"><i class="bi bi-incognito text-danger"></i> Active Incident Case Files Pending Investigation Action</h5>
+                    
+                    {% for entry in entries %}
+                    <div class="case-block-card">
+                        <div class="row align-items-center">
+                            <div class="col-md-4">
+                                <span class="text-muted small d-block">LEDGER LOG REFERENCE NUMBER</span>
+                                <strong class="text-info font-monospace" style="font-size: 1.1rem;">{{ entry.ob_number }}</strong>
+                                <span class="d-block small mt-1 text-secondary">Logged By Officer: {{ entry.recorded_by }}</span>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="text-muted small d-block">OFFENCE VECTOR PARAMETER</span>
+                                <span class="badge bg-danger mt-1">{{ entry.nature_of_offence }}</span>
+                                <p class="small text-truncate mt-2 mb-0" style="max-width: 250px;">{{ entry.details }}</p>
+                            </div>
+                            <div class="col-md-4">
+                                <form action="/cases/update/{{ entry.id }}" method="POST">
+                                    <span class="text-muted small d-block mb-1">AMEND SYSTEM EXECUTION BOUNDARY</span>
+                                    <div class="input-group">
+                                        <select name="status" class="form-select input-custom">
+                                            <option value="Under Investigation" selected>Under Investigation</option>
+                                            <option value="Forwarded to ODPP">Forwarded to ODPP</option>
+                                            <option value="Closed / Concluded">Closed / Concluded</option>
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-dark border-secondary text-white">Update</button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
-                        {% else %}
-                        <div class="text-muted text-center small py-2">No timeline updates logged inside case journal.</div>
-                        {% endfor %}
                     </div>
-                    <form action="/cases/diary/{{ case.id }}" method="POST" class="d-flex g-1">
-                        <input type="text" name="activity_details" class="form-control form-control-sm me-1" placeholder="Type new chronological entry milestone..." required>
-                        <button type="submit" class="btn btn-sm btn-secondary">Record</button>
-                    </form>
-                </div>
-
-                <div class="col-md-6">
-                    <h6 class="fw-bold text-dark">Secure Evidence Vault Partition Enclosure</h6>
-                    <div class="bg-light p-2 rounded mb-2 small" style="max-height: 110px; overflow-y: auto;">
-                        {% for file in case.evidence_files %}
-                        <div class="d-flex justify-content-between align-items-center mb-1 border-bottom pb-1 text-dark">
-                            <span>{{ file.description }} <span class="text-muted font-monospace">({{ file.mime_type }})</span></span>
-                        </div>
-                        {% else %}
-                        <div class="text-muted text-center small py-2">Evidence binary safe vault is currently empty.</div>
-                        {% endfor %}
-                    </div>
-                    <form action="/cases/evidence/upload/{{ case.id }}" method="POST" enctype="multipart/form-data" class="row g-1">
-                        <div class="col-7"><input type="file" name="evidence_file" class="form-control form-control-sm" required></div>
-                        <div class="col-5"><input type="text" name="description" class="form-control form-control-sm" placeholder="Exhibit Desc" required></div>
-                        <div class="col-12 mt-1"><button type="submit" class="btn btn-sm btn-outline-dark w-100">Upload Encrypted Document</button></div>
-                    </form>
+                    {% else %}
+                    <div class="alert alert-dark bg-dark text-muted border-secondary py-5 text-center">No open cases inside current runtime database node ledger matrix bounds.</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
-        {% else %}
-        <div class="alert alert-secondary text-center py-5">No active case architecture profiles currently initiated inside station databases. Create case structures directly inside the OB View Panel.</div>
-        {% endfor %}
     </div>
 </body>
 </html>
