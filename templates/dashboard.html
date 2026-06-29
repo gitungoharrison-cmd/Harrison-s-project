@@ -1,6 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <style>
+  /* Base Corporate Blueprint */
+  body {
+    background-color: #0f172a !important; /* Deep Navy Base */
+    color: #f8fafc !important; /* Off-White for global readable reading text */
+  }
+  
+  /* Dashboard Card Layout Rule: White Background, Forced Black Text */
+  .dashboard-card, .bg-white, [class*="bg-white"] {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  .dashboard-card *, .bg-white *, [class*="bg-white"] * {
+    color: #000000 !important;
+  }
+  
+  /* Buttons Matrix Rule: Deep Navy Background, Forced White Text */
+  button, .btn, [class*="btn-primary"] {
+    background-color: #1e293b !important; /* Deep Navy Variant Button */
+    color: #ffffff !important; /* Crisp White Text */
+    border: 1px solid #334155 !important;
+  }
+</style>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NPS - DPOBCMS Command Dashboard</title>
