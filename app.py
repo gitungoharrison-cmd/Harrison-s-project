@@ -263,7 +263,7 @@ def register_officer():
     # Applied cryptographically secure hashing configuration to save master passwords safely
     hashed_password = generate_password_hash(password)
     new_officer = Officer(service_number=service_number, password=hashed_password, name=name, role=role, station=station)
-    db.add(new_officer)
+    db.session.add(new_officer) # Added correct session reference path here
     db.session.commit() # Hard flash synchronization logic
     
     flash('New personnel credentials blocks successfully authorized.', 'success')
@@ -324,63 +324,4 @@ def export_report():
         
         return send_file(
             output,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            as_attachment=True,
-            download_name=f"NPS_Crime_Statistical_Report_Matrix_{datetime.utcnow().strftime('%Y%m%d')}.xlsx"
-        )
-        
-    except Exception as e:
-        flash(f"Data extraction matrix failure: {str(e)}", "danger")
-        return redirect(url_for('reports'))
-
-# ==========================================
-# PUBLIC CITIZEN INTERFACE ACCESS VECTOR
-# ==========================================
-
-@app.route('/public-portal', methods=['GET', 'POST'])
-def public_portal():
-    search_result = None
-    searched = False
-    error_msg = None
-    
-    if request.method == 'POST':
-        searched = True
-        query_string = request.form.get('query_string', '').strip().upper()
-        
-        # Search localized ledger entries matching public reference strings
-        search_result = OccurrenceBook.query.filter_by(ob_number=query_string).first()
-        
-        if not search_result:
-            error_msg = f"No record matching reference token '{query_string}' could be located."
-            
-    return render_template('public_portal.html', result=search_result, searched=searched, error_msg=error_msg)
-
-@app.route('/audit-logs')
-def audit_logs():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    return "<h5>Security Audit Logging Infrastructure: Active Protocol Stream Monitor</h5><p><a href='/dashboard'>Return to Matrix</a></p>"
-
-# ==========================================
-# SEED INITIALIZATION ENVIRONMENT NODE
-# ==========================================
-
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        # Seed cryptographically hashed admin node automatically if the infrastructure is fresh
-        if not Officer.query.filter_by(service_number='KP-ADMIN').first():
-            admin_node = Officer(
-                service_number='KP-ADMIN',
-                password=generate_password_hash('59406_admin_lock'),
-                name='Chief Superintendent Administrator',
-                role='Admin',
-                station='NYERI CENTRAL POLICE STATION'
-            )
-            db.session.add(admin_node)
-            db.session.commit()
-            print("[SYSTEM SEED] Singular Genesis Point Logged: Master Secure Admin Created.")
-            
-    # Dynamically pick up the environment variable assigned by the Render platform runtime
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+            mimetype="application/
