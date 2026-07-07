@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>National Police Service - DPOBCMS</title>
+    <!-- Tailwind CSS Engine CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            DEFAULT: '#0f172a',
+                            card: '#1e293b',
+                            border: '#334155'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-[#0f172a] text-slate-100 min-h-screen flex flex-col md:flex-row">
+
+    <!-- Left Navigation Sidebar Section -->
+    <aside class="w-full md:w-64 bg-[#1e293b] border-b md:border-b-0 md:border-r border-[#334155] flex flex-col shrink-0">
+        <!-- Station Identity Header -->
+        <div class="p-5 border-b border-[#334155]">
+            <h1 class="text-sm font-bold tracking-wider text-white uppercase font-mono">DPOBCMS v2.0</h1>
+            <p class="text-[10px] text-[#2ec4b6] font-mono mt-0.5 uppercase tracking-tight">
+                {{ session.get('user_station', 'NYERI CENTRAL STATION') }}
+            </p>
+        </div>
+
+        <!-- System Navigation Vector Array Links -->
+        <nav class="flex-1 p-4 space-y-1.5 font-mono text-xs">
+            {% if session.get('logged_in') %}
+                <a href="{{ url_for('dashboard') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                    <span>📊</span> <span>Station Dashboard</span>
+                </a>
+                <a href="{{ url_for('register_ob') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                    <span>📝</span> <span>New OB Intake</span>
+                </a>
+                <a href="{{ url_for('view_ob') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                    <span>📖</span> <span>Digital OB Feed</span>
+                </a>
+                <a href="{{ url_for('cases') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                    <span>🔍</span> <span>Investigation Matrix</span>
+                </a>
+                <a href="{{ url_for('reports') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                    <span>📊</span> <span>Data Exports (.XLSX)</span>
+                </a>
+                
+                {% if session.get('user_role') == 'Admin' or session.get('user_role') == 'OCS' %}
+                <div class="pt-4 border-t border-[#334155]/60 my-2">
+                    <span class="px-2.5 text-[10px] uppercase tracking-wider text-[#64748b] block mb-1">Command Control</span>
+                    <a href="{{ url_for('admin_users') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                        <span>👥</span> <span>Force Roster Mgmt</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- Active Session Accountability Box Node -->
+                <div class="mt-8 bg-[#0f172a] p-3 border border-[#334155] rounded text-[11px] text-slate-400 space-y-1">
+                    <div>User: <strong class="text-white">{{ session.get('user_name') }}</strong></div>
+                    <div>Badge: <strong class="text-slate-200">{{ session.get('service_number') }}</strong></div>
+                    <div class="pt-2">
+                        <a href="{{ url_for('logout') }}" class="block text-center bg-rose-600/20 hover:bg-rose-600 border border-rose-500/40 hover:border-rose-500 text-white font-bold py-1 px-2 rounded transition uppercase tracking-wide text-[10px]">
+                            Terminate Session
+                        </a>
+                    </div>
+                </div>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                    <span>🔒</span> <span>Station Authentication Gateway</span>
+                </a>
+                <a href="{{ url_for('public_portal') }}" class="flex items-center space-x-2.5 text-slate-300 hover:text-white hover:bg-[#0f172a] p-2.5 rounded transition">
+                    <span>🌐</span> <span>Public Citizen Portal</span>
+                </a>
+            {% endif %}
+        </nav>
+    </aside>
+
+    <!-- Right Dynamic Central Application Workspace Context Box -->
+    <main class="flex-1 flex flex-col overflow-x-hidden">
+        <!-- Intercept Alert Notifications Toast Pipeline -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="p-4 bg-[#0f172a] border-b border-[#334155] space-y-2 font-mono text-xs">
+                    {% for category, message in messages %}
+                        <div class="p-3 rounded border {% if category == 'success' %}bg-teal-500/10 border-teal-500/40 text-[#2ec4b6]{% else %}bg-rose-500/10 border-rose-500/40 text-rose-400{% endif %} flex justify-between items-center">
+                            <span>{{ message }}</span>
+                            <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white font-bold">&times;</button>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Content Body Block Vector Output Matrix Injection Point -->
+        <div class="p-4 md:p-8 flex-1">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+</body>
+</html>
