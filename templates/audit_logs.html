@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 font-mono">
+    
+    <div class="bg-[#1e293b] border border-[#334155] p-6 rounded-lg flex justify-between items-center shadow-md">
+        <div>
+            <h2 class="text-lg font-bold text-white uppercase tracking-wide">Immutable Security Audit Ledger</h2>
+            <p class="text-xs text-slate-400 mt-0.5">National Police Service — System Integrity Stream Logs</p>
+        </div>
+        <span class="text-xs bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded font-bold uppercase tracking-wider">Monitored Safe Node</span>
+    </div>
+
+    <div class="bg-white text-black p-6 rounded-lg border border-slate-200 shadow-xl space-y-4">
+        <h3 class="text-sm font-black border-b border-slate-200 pb-2 uppercase tracking-wide text-black">
+            System Activity Trace Vector Logs
+        </h3>
+        
+        <div class="overflow-x-auto rounded border border-slate-200">
+            <table class="w-full text-left text-xs border-collapse">
+                <thead>
+                    <tr class="bg-[#1e293b] border-b border-[#334155] text-white uppercase tracking-wider text-[10px]">
+                        <th class="p-3 font-bold">Log Timestamp</th>
+                        <th class="p-3 font-bold">Operator Badge</th>
+                        <th class="p-3 font-bold">Action Event Vector</th>
+                        <th class="p-3 font-bold">Network Client Context</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 font-medium text-black">
+                    {% for log in logs %}
+                    <tr class="hover:bg-slate-50 transition duration-100">
+                        <td class="p-3 text-slate-600 font-bold whitespace-nowrap">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+                        <td class="p-3 font-black text-slate-900">{{ log.operator }}</td>
+                        <td class="p-3">
+                            <span class="bg-slate-100 border border-slate-300 text-slate-900 font-bold px-2 py-1 rounded text-[11px] block whitespace-pre-wrap leading-tight">
+                                {{ log.action }}
+                            </span>
+                        </td>
+                        <td class="p-3 text-slate-500 font-mono tracking-tighter">{{ log.ip_address }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="p-8 text-center text-slate-400 font-bold bg-slate-50">
+                            No security state mutations or transaction records present in current audit boundary loop.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
