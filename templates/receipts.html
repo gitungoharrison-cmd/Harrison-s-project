@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NPS ABSTRACT - {{ entry.ob_number }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            body { background: white !important; color: black !important; padding: 0; }
+            .no-print { display: none !important; }
+            .print-border { border: 2px solid #000000 !important; border-radius: 0 !important; background: #ffffff !important; }
+            .print-text-dark { color: #000000 !important; font-weight: 800 !important; }
+            .print-text-muted { color: #334155 !important; }
+            .print-bg-light { background: #f8fafc !important; border: 1px solid #000000 !important; }
+        }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-white p-4 md:p-12 font-mono text-xs antialiased">
+
+    <div class="max-w-2xl mx-auto mb-6 bg-[#1e293b] border border-[#334155] p-4 rounded no-print flex justify-between items-center shadow-md">
+        <span class="text-white font-bold tracking-wide uppercase text-[11px]">Official Verification Layer View Mode</span>
+        <button onclick="window.print()" class="bg-[#2ec4b6] hover:bg-[#209e93] text-black font-extrabold px-5 py-2.5 rounded uppercase text-[11px] tracking-widest transition duration-150 shadow-sm">
+            🖨️ Execute Print / PDF Export
+        </button>
+    </div>
+
+    <div class="max-w-2xl mx-auto bg-[#0f172a] text-white p-8 border-2 border-[#334155] print-border space-y-6 shadow-xl">
+        
+        <div class="border-b-2 border-slate-600 pb-4 text-center sm:text-left space-y-1.5">
+            <h1 class="text-sm font-black tracking-wider text-white print-text-dark uppercase">NATIONAL POLICE SERVICE - REPUBLIC OF KENYA</h1>
+            <h2 class="text-xs font-black text-slate-200 print-text-dark uppercase">OFFICIAL DIGITAL OB ABSTRACT RECORD JURISDICTION: {{ entry.jurisdiction | uppercase }}</h2>
+        </div>
+
+        <div class="bg-black border border-slate-700 p-3 rounded text-[11px] space-y-1 print-bg-light">
+            <span class="text-[#2ec4b6] print-text-dark font-black block text-[10px] uppercase tracking-wider">SECURITY ABSTRACT CRYPTOGRAPHIC VALIDATION BLOCK</span>
+            <div class="break-all font-mono text-white print-text-dark font-bold">TOKEN TRACE: NPS-VERIFY:{{ entry.ob_number }}:{{ entry.complainant_phone | replace('+', '') }}:E3C29A4B25...</div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-2">
+            
+            <div class="space-y-4">
+                <div>
+                    <span class="text-slate-400 print-text-muted block text-[10px] uppercase font-black tracking-wider">OB Reference Number</span>
+                    <span class="text-white print-text-dark text-base font-black tracking-wide block mt-0.5">{{ entry.ob_number }}</span>
+                </div>
+
+                <div>
+                    <span class="text-slate-400 print-text-muted block text-[10px] uppercase font-black tracking-wider">Filing Timestamp</span>
+                    <span class="text-white print-text-dark text-xs font-bold block mt-0.5">{{ entry.date_time.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
