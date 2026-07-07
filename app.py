@@ -147,6 +147,28 @@ def view_ob():
     entries = OccurrenceBook.query.order_by(OccurrenceBook.date_time.desc()).all()
     return render_template('view_ob.html', entries=entries)
 
+# --- LIVE TRANSCRIPT MODIFICATION ROUTE VECTOR ---
+@app.route('/ob/update_statement/<int:id>', methods=['POST'])
+def update_statement(id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+        
+    entry = OccurrenceBook.query.get_or_404(id)
+    new_statement = request.form.get('updated_details')
+    
+    if new_statement:
+        # Timestamp and append accountability tracks to structural log fields
+        timestamp_label = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+        operator_label = session.get('service_number', 'UNKNOWN')
+        
+        entry.details = new_statement + f"\n\n[AMENDMENT LOGGED BY {operator_label} ON {timestamp_label}]"
+        db.session.commit() # Immediate persistence write out to hardware tracking partitions
+        flash(f"Data layer synchronized. Statement details for {entry.ob_number} modified successfully.", "success")
+    else:
+        flash("Statement text body parameters cannot be initialized blank.", "danger")
+        
+    return redirect(url_for('view_ob'))
+
 # ==========================================
 # ADVANCED SUSPECT INTEL DISPATCH REGISTER
 # ==========================================
