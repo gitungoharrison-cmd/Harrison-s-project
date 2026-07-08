@@ -8,15 +8,22 @@ from werkzeug.utils import secure_filename
 app = Flask(__name__)
 app.secret_key = 'nps_core_infrastructure_secure_encryption_vector_key'
 
-# Secure Storage Parameters Setup
-UPLOAD_FOLDER = os.path.join('static', 'uploads')
+# ==========================================
+# PRODUCTION PERSISTENT STORAGE PATH ARCHITECTURE
+# ==========================================
+# If running on Render with a disk mounted at /data, use it; otherwise fall back to local structure
+if os.path.exists('/data'):
+    UPLOAD_FOLDER = os.path.join('/data', 'uploads')
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/dpobcms_core.db'
+else:
+    UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static', 'uploads')
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dpobcms_core.db'
+
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'xlsx'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB ceiling capacity limit
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB ceiling capacity limit Max Upload
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Database Framework Connection Instantiation
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dpobcms_core.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -79,11 +86,11 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        srv_num = request.form['service_number'].strip()
+        srv_num = request.form['service_number'].strip().upper()
         pwd = request.form['password']
         
         user = SystemUser.query.filter_by(service_number=srv_num).first()
-        if user and user.password_hash == pwd:  # For production, verify with secure hashing algorithms
+        if user and user.password_hash == pwd:
             session['logged_in'] = True
             session['user_id'] = user.id
             session['service_number'] = user.service_number
@@ -116,7 +123,6 @@ def view_ob():
     if not session.get('logged_in'): return redirect(url_for('login'))
     
     if request.method == 'POST':
-        # Generate clean incremental sequence OB string signature tracking format
         count = OccurrenceBook.query.count() + 1
         ob_serial = f"OB/{datetime.now().year}/{count:06d}"
         
@@ -146,7 +152,6 @@ def print_receipt(id):
 @app.route('/cases')
 def cases():
     if not session.get('logged_in'): return redirect(url_for('login'))
-    # Only display entries that require investigation or verification steps
     entries = OccurrenceBook.query.filter(OccurrenceBook.status.in_(['PENDING REVIEW', 'INVESTIGATING'])).all()
     return render_template('cases.html', entries=entries)
 
@@ -155,7 +160,7 @@ def upload_evidence(id):
     if not session.get('logged_in'): return redirect(url_for('login'))
     entry = OccurrenceBook.query.get_or_404(id)
     
-    # Track down camera base64 snapshot stream
+    # Track camera base64 snapshot stream
     snapshot = request.form.get('camera_snapshot_data')
     if snapshot and snapshot.startswith('data:image'):
         entry.suspect_photo = snapshot
@@ -168,7 +173,7 @@ def upload_evidence(id):
             filename = secure_filename(f"EVID_{id}_{int(datetime.utcnow().timestamp())}_{file.filename}")
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
-            entry.evidence_file = filepath
+            entry.evidence_file = filename  # Save name context references inside the layout elements
             commit_audit(f"Binary security verification file artifact logged successfully: {filename}")
             
     entry.status = 'INVESTIGATING'
@@ -202,7 +207,6 @@ def resolve_case(id):
 def reports():
     if not session.get('logged_in'): return redirect(url_for('login'))
     if request.method == 'POST':
-        # Flash mock report download pipeline generation feedback
         rtype = request.form.get('report_type')
         fmt = request.form.get('export_format')
         commit_audit(f"Statistical accounting spreadsheet compiled and downloaded. Target matrix parameter classification: [{rtype}] under format template context extension: [.{fmt}]")
@@ -222,7 +226,7 @@ def admin_users():
             rank=request.form['rank'].strip(),
             station=request.form['station'].strip(),
             role=request.form['role'],
-            password_hash=request.form['password'] # Use secure encryption in deployment systems
+            password_hash=request.form['password']
         )
         db.session.add(new_user)
         db.session.commit()
@@ -243,7 +247,7 @@ def audit_logs():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Create default superuser if database table bounds register empty
+        # Seed core fallback master supervisor if no users are registered yet
         if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
             root_admin = SystemUser(
                 service_number='NPS/ADMIN/001',
