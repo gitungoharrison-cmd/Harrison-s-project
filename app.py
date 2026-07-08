@@ -126,7 +126,8 @@ def dashboard():
 @app.route('/ob/view', methods=['GET', 'POST'])
 def register_ob():
     """Handles references to url_for('register_ob')"""
-    if not session.get('logged_in'): return redirect(url_for('login'))
+    if not session.get('logged_in'): 
+        return redirect(url_for('login'))
     
     if request.method == 'POST':
         count = OccurrenceBook.query.count() + 1
@@ -165,40 +166,4 @@ def print_receipt(id):
 def cases():
     if not session.get('logged_in'): return redirect(url_for('login'))
     entries = OccurrenceBook.query.filter(OccurrenceBook.status.in_(['PENDING REVIEW', 'INVESTIGATING'])).all()
-    return render_template('cases.html', entries=entries)
-
-@app.route('/cases/upload-evidence/<int:id>', methods=['POST'])
-def upload_evidence(id):
-    if not session.get('logged_in'): return redirect(url_for('login'))
-    entry = OccurrenceBook.query.get_or_404(id)
-    
-    snapshot = request.form.get('camera_snapshot_data')
-    if snapshot and snapshot.startswith('data:image'):
-        entry.suspect_photo = snapshot
-        commit_audit(f"Suspect identity face matrix snapshot captured and buffered directly for index reference: {entry.ob_number}")
-        
-    if 'evidence_document' in request.files:
-        file = request.files['evidence_document']
-        if file and file.filename != '' and allowed_file(file.filename):
-            filename = secure_filename(f"EVID_{id}_{int(datetime.utcnow().timestamp())}_{file.filename}")
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            entry.evidence_file = filename  
-            commit_audit(f"Binary security verification file artifact logged successfully: {filename}")
-            
-    entry.status = 'INVESTIGATING'
-    db.session.commit()
-    return redirect(url_for('cases'))
-
-@app.route('/cases/resolve/<int:id>', methods=['POST'])
-def resolve_case(id):
-    if not session.get('logged_in'): return redirect(url_for('login'))
-    entry = OccurrenceBook.query.get_or_404(id)
-    
-    action = request.form.get('resolution_action')
-    notes = request.form.get('resolution_notes', '').strip()
-    
-    if action == 'innocent':
-        entry.status = 'PROVEN INNOCENT'
-        commit_audit(f"Case resolution action vector executed: Charges dropped. Suspect verified innocent for {entry.ob_number}. Notes: {notes}")
-    elif action == 'close':
+    return render_template('cases.html', entries=entries
