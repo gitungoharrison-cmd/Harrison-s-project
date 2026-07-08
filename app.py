@@ -9,19 +9,22 @@ app = Flask(__name__)
 app.secret_key = 'nps_core_infrastructure_secure_encryption_vector_key'
 
 # ==========================================
-# PRODUCTION PERSISTENT STORAGE PATH ARCHITECTURE
+# PRODUCTION RENDER PERSISTENT DISK ARCHITECTURE
 # ==========================================
-# If running on Render with a disk mounted at /data, use it; otherwise fall back to local structure
+# Render mounts your persistent disk at a path like /data. 
+# We detect if /data exists; if it does, we anchor our DB and files there safely.
 if os.path.exists('/data'):
-    UPLOAD_FOLDER = os.path.join('/data', 'uploads')
+    UPLOAD_FOLDER = '/data/uploads'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/dpobcms_core.db'
 else:
-    UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static', 'uploads')
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dpobcms_core.db'
+    # Local fallback for development on your machine
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'dpobcms_core.db')}"
 
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'xlsx'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB ceiling capacity limit Max Upload
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB file capacity ceiling limit
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -72,6 +75,11 @@ def commit_audit(action_desc):
 # Helper Function: Extension Safety Boundary Guard Check
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+# Custom route template filter to serve files directly from Render's persistent disk
+@app.route('/uploads/<filename>')
+def serve_upload(filename):
+    return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
 # ==========================================
 # SYSTEM FUNCTIONAL ROUTES LAYER
@@ -160,20 +168,20 @@ def upload_evidence(id):
     if not session.get('logged_in'): return redirect(url_for('login'))
     entry = OccurrenceBook.query.get_or_404(id)
     
-    # Track camera base64 snapshot stream
+    # Capture camera base64 snapshot stream
     snapshot = request.form.get('camera_snapshot_data')
     if snapshot and snapshot.startswith('data:image'):
         entry.suspect_photo = snapshot
         commit_audit(f"Suspect identity face matrix snapshot captured and buffered directly for index reference: {entry.ob_number}")
         
-    # Handle incoming physical file attachment arrays securely
+    # Handle incoming physical file attachments securely
     if 'evidence_document' in request.files:
         file = request.files['evidence_document']
         if file and file.filename != '' and allowed_file(file.filename):
             filename = secure_filename(f"EVID_{id}_{int(datetime.utcnow().timestamp())}_{file.filename}")
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
-            entry.evidence_file = filename  # Save name context references inside the layout elements
+            entry.evidence_file = filename  
             commit_audit(f"Binary security verification file artifact logged successfully: {filename}")
             
     entry.status = 'INVESTIGATING'
@@ -247,7 +255,6 @@ def audit_logs():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        # Seed core fallback master supervisor if no users are registered yet
         if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
             root_admin = SystemUser(
                 service_number='NPS/ADMIN/001',
@@ -259,4 +266,8 @@ if __name__ == '__main__':
             )
             db.session.add(root_admin)
             db.session.commit()
-    app.run(debug=True)
+            
+    # CRITICAL RENDER NETWORK BIND FIX: 
+    # Extract structural environment wrapper port variables or map to fallback 5000
+    bind_port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=bind_port)
