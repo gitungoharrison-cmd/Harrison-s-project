@@ -11,20 +11,17 @@ app.secret_key = 'nps_core_infrastructure_secure_encryption_vector_key'
 # ==========================================
 # PRODUCTION RENDER PERSISTENT DISK ARCHITECTURE
 # ==========================================
-# Render mounts your persistent disk at a path like /data. 
-# We detect if /data exists; if it does, we anchor our DB and files there safely.
 if os.path.exists('/data'):
     UPLOAD_FOLDER = '/data/uploads'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/dpobcms_core.db'
 else:
-    # Local fallback for development on your machine
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'static', 'uploads')
     app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'dpobcms_core.db')}"
 
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'xlsx'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB file capacity ceiling limit
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -40,7 +37,7 @@ class SystemUser(db.Model):
     name = db.Column(db.String(100), nullable=False)
     rank = db.Column(db.String(50), nullable=False)
     station = db.Column(db.String(100), nullable=False)
-    role = db.Column(db.String(50), nullable=False)  # Admin, Investigator, Officer
+    role = db.Column(db.String(50), nullable=False)  
     password_hash = db.Column(db.String(128), nullable=False)
 
 class OccurrenceBook(db.Model):
@@ -52,10 +49,10 @@ class OccurrenceBook(db.Model):
     complainant_phone = db.Column(db.String(50), nullable=False)
     nature_of_offence = db.Column(db.String(100), nullable=False)
     details = db.Column(db.Text, nullable=False)
-    status = db.Column(db.String(50), default='PENDING REVIEW', nullable=False) # PENDING REVIEW, INVESTIGATING, CLOSED, PROVEN INNOCENT
+    status = db.Column(db.String(50), default='PENDING REVIEW', nullable=False) 
     recorded_by = db.Column(db.String(50), nullable=False)
-    suspect_photo = db.Column(db.Text, nullable=True)  # Base64 Camera String URI
-    evidence_file = db.Column(db.String(255), nullable=True)  # Storage path token
+    suspect_photo = db.Column(db.Text, nullable=True)  
+    evidence_file = db.Column(db.String(255), nullable=True)  
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -64,7 +61,6 @@ class AuditLog(db.Model):
     action = db.Column(db.Text, nullable=False)
     ip_address = db.Column(db.String(50), nullable=False)
 
-# Helper Function: Audit Log Injection
 def commit_audit(action_desc):
     operator = session.get('service_number', 'SYSTEM-DAEMON')
     ip = request.remote_addr or '127.0.0.1'
@@ -72,11 +68,9 @@ def commit_audit(action_desc):
     db.session.add(log_entry)
     db.session.commit()
 
-# Helper Function: Extension Safety Boundary Guard Check
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Custom route template filter to serve files directly from Render's persistent disk
 @app.route('/uploads/<filename>')
 def serve_upload(filename):
     return send_file(os.path.join(app.config['UPLOAD_FOLDER'], filename))
@@ -151,6 +145,14 @@ def view_ob():
     entries = OccurrenceBook.query.order_by(OccurrenceBook.date_time.desc()).all()
     return render_template('view_ob.html', entries=entries)
 
+# ==========================================
+# ALIAS BRIDGE MAP FOR JINJA TEMPLATE COMPATIBILITY
+# ==========================================
+@app.route('/ob/register-legacy-bridge')
+def register_ob():
+    """Catches legacy 'register_ob' url_for calls from templates and bridges seamlessly to view_ob."""
+    return redirect(url_for('view_ob'))
+
 @app.route('/ob/receipt/<int:id>')
 def print_receipt(id):
     if not session.get('logged_in'): return redirect(url_for('login'))
@@ -168,13 +170,11 @@ def upload_evidence(id):
     if not session.get('logged_in'): return redirect(url_for('login'))
     entry = OccurrenceBook.query.get_or_404(id)
     
-    # Capture camera base64 snapshot stream
     snapshot = request.form.get('camera_snapshot_data')
     if snapshot and snapshot.startswith('data:image'):
         entry.suspect_photo = snapshot
         commit_audit(f"Suspect identity face matrix snapshot captured and buffered directly for index reference: {entry.ob_number}")
         
-    # Handle incoming physical file attachments securely
     if 'evidence_document' in request.files:
         file = request.files['evidence_document']
         if file and file.filename != '' and allowed_file(file.filename):
@@ -203,71 +203,3 @@ def resolve_case(id):
         entry.status = 'CLOSED'
         commit_audit(f"Case resolution action vector executed: Ledger item closed formally for {entry.ob_number}. Notes: {notes}")
     elif action == 'remove':
-        commit_audit(f"Administrative database structural purge executed. Deleting suspect incident record file: {entry.ob_number}")
-        db.session.delete(entry)
-        db.session.commit()
-        return redirect(url_for('cases'))
-        
-    db.session.commit()
-    return redirect(url_for('cases'))
-
-@app.route('/reports', methods=['GET', 'POST'])
-def reports():
-    if not session.get('logged_in'): return redirect(url_for('login'))
-    if request.method == 'POST':
-        rtype = request.form.get('report_type')
-        fmt = request.form.get('export_format')
-        commit_audit(f"Statistical accounting spreadsheet compiled and downloaded. Target matrix parameter classification: [{rtype}] under format template context extension: [.{fmt}]")
-        flash(f"Data package pipeline processed successfully. Output format trace signature executed under code: {rtype.upper()}-STREAM.{fmt}", "success")
-    return render_template('reports.html')
-
-@app.route('/admin/users', methods=['GET', 'POST'])
-def admin_users():
-    if not session.get('logged_in') or session.get('role') != 'Admin':
-        flash("Privilege error: Access restricted to authorized Command System Administrators.", "danger")
-        return redirect(url_for('dashboard'))
-        
-    if request.method == 'POST':
-        new_user = SystemUser(
-            service_number=request.form['service_number'].strip().upper(),
-            name=request.form['name'].strip(),
-            rank=request.form['rank'].strip(),
-            station=request.form['station'].strip(),
-            role=request.form['role'],
-            password_hash=request.form['password']
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        commit_audit(f"Admin Access Management Action: Provisioned new deployment profile context for agent user node [{new_user.service_number}]")
-        return redirect(url_for('admin_users'))
-        
-    users = SystemUser.query.all()
-    return render_template('admin_users.html', users=users)
-
-@app.route('/audit-logs')
-def audit_logs():
-    if not session.get('logged_in') or session.get('role') != 'Admin':
-        return redirect(url_for('dashboard'))
-    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
-    return render_template('audit_logs.html', logs=logs)
-
-# Initialize database schemas and seed a standard Admin configuration profile securely automatically
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
-            root_admin = SystemUser(
-                service_number='NPS/ADMIN/001',
-                name='Commissioner Gitungo',
-                rank='Senior Director Systems Architecture',
-                station='Nyeri Central Police Station',
-                role='Admin',
-                password_hash='admin123'
-            )
-            db.session.add(root_admin)
-            db.session.commit()
-            
-    # CRITICAL RENDER NETWORK BIND FIX: 
-    # Extract structural environment wrapper port variables or map to fallback 5000
-    bind_port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=bind_port)
