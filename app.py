@@ -120,9 +120,12 @@ def dashboard():
     concluded = OccurrenceBook.query.filter(OccurrenceBook.status.in_(['CLOSED', 'PROVEN INNOCENT'])).count()
     return render_template('dashboard.html', total_ob=total_ob, active_cases=active_cases, concluded=concluded)
 
+# -------------------------------------------------------------
+# DUAL OB ENDPOINTS TO RECONCILE ALL JINJA TEMPLATE LINKS
+# -------------------------------------------------------------
 @app.route('/ob/view', methods=['GET', 'POST'])
 def register_ob():
-    """Renamed to register_ob to cleanly resolve layout URL building restrictions."""
+    """Handles references to url_for('register_ob')"""
     if not session.get('logged_in'): return redirect(url_for('login'))
     
     if request.method == 'POST':
@@ -145,6 +148,12 @@ def register_ob():
         
     entries = OccurrenceBook.query.order_by(OccurrenceBook.date_time.desc()).all()
     return render_template('view_ob.html', entries=entries)
+
+@app.route('/ob/view-legacy-bridge')
+def view_ob():
+    """Handles references to url_for('view_ob') without changing template files"""
+    return redirect(url_for('register_ob'))
+# -------------------------------------------------------------
 
 @app.route('/ob/receipt/<int:id>')
 def print_receipt(id):
@@ -193,71 +202,3 @@ def resolve_case(id):
         entry.status = 'PROVEN INNOCENT'
         commit_audit(f"Case resolution action vector executed: Charges dropped. Suspect verified innocent for {entry.ob_number}. Notes: {notes}")
     elif action == 'close':
-        entry.status = 'CLOSED'
-        commit_audit(f"Case resolution action vector executed: Ledger item closed formally for {entry.ob_number}. Notes: {notes}")
-    elif action == 'remove':
-        commit_audit(f"Administrative database structural purge executed. Deleting suspect incident record file: {entry.ob_number}")
-        db.session.delete(entry)
-        db.session.commit()
-        return redirect(url_for('cases'))
-        
-    db.session.commit()
-    return redirect(url_for('cases'))
-
-@app.route('/reports', methods=['GET', 'POST'])
-def reports():
-    if not session.get('logged_in'): return redirect(url_for('login'))
-    if request.method == 'POST':
-        rtype = request.form.get('report_type')
-        fmt = request.form.get('export_format')
-        commit_audit(f"Statistical accounting spreadsheet compiled and downloaded. Target matrix parameter classification: [{rtype}] under format template context extension: [.{fmt}]")
-        flash(f"Data package pipeline processed successfully. Output format trace signature executed under code: {rtype.upper()}-STREAM.{fmt}", "success")
-    return render_template('reports.html')
-
-@app.route('/admin/users', methods=['GET', 'POST'])
-def admin_users():
-    if not session.get('logged_in') or session.get('role') != 'Admin':
-        flash("Privilege error: Access restricted to authorized Command System Administrators.", "danger")
-        return redirect(url_for('dashboard'))
-        
-    if request.method == 'POST':
-        new_user = SystemUser(
-            service_number=request.form['service_number'].strip().upper(),
-            name=request.form['name'].strip(),
-            rank=request.form['rank'].strip(),
-            station=request.form['station'].strip(),
-            role=request.form['role'],
-            password_hash=request.form['password']
-        )
-        db.session.add(new_user)
-        db.session.commit()
-        commit_audit(f"Admin Access Management Action: Provisioned new deployment profile context for agent user node [{new_user.service_number}]")
-        return redirect(url_for('admin_users'))
-        
-    users = SystemUser.query.all()
-    return render_template('admin_users.html', users=users)
-
-@app.route('/audit-logs')
-def audit_logs():
-    if not session.get('logged_in') or session.get('role') != 'Admin':
-        return redirect(url_for('dashboard'))
-    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
-    return render_template('audit_logs.html', logs=logs)
-
-if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
-            root_admin = SystemUser(
-                service_number='NPS/ADMIN/001',
-                name='Commissioner Gitungo',
-                rank='Senior Director Systems Architecture',
-                station='Nyeri Central Police Station',
-                role='Admin',
-                password_hash='admin123'
-            )
-            db.session.add(root_admin)
-            db.session.commit()
-            
-    bind_port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=bind_port)
