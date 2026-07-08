@@ -114,7 +114,8 @@ def logout():
 
 @app.route('/dashboard')
 def dashboard():
-    if not session.get('logged_in'): return redirect(url_for('login'))
+    if not session.get('logged_in'): 
+        return redirect(url_for('login'))
     total_ob = OccurrenceBook.query.count()
     active_cases = OccurrenceBook.query.filter(OccurrenceBook.status.in_(['PENDING REVIEW', 'INVESTIGATING'])).count()
     concluded = OccurrenceBook.query.filter(OccurrenceBook.status.in_(['CLOSED', 'PROVEN INNOCENT'])).count()
@@ -158,12 +159,121 @@ def view_ob():
 
 @app.route('/ob/receipt/<int:id>')
 def print_receipt(id):
-    if not session.get('logged_in'): return redirect(url_for('login'))
+    if not session.get('logged_in'): 
+        return redirect(url_for('login'))
     entry = OccurrenceBook.query.get_or_404(id)
     return render_template('receipt.html', entry=entry)
 
 @app.route('/cases')
 def cases():
-    if not session.get('logged_in'): return redirect(url_for('login'))
+    if not session.get('logged_in'): 
+        return redirect(url_for('login'))
     entries = OccurrenceBook.query.filter(OccurrenceBook.status.in_(['PENDING REVIEW', 'INVESTIGATING'])).all()
-    return render_template('cases.html', entries=entries
+    return render_template('cases.html', entries=entries)
+
+@app.route('/cases/upload-evidence/<int:id>', methods=['POST'])
+def upload_evidence(id):
+    if not session.get('logged_in'): 
+        return redirect(url_for('login'))
+    entry = OccurrenceBook.query.get_or_404(id)
+    
+    snapshot = request.form.get('camera_snapshot_data')
+    if snapshot and snapshot.startswith('data:image'):
+        entry.suspect_photo = snapshot
+        commit_audit(f"Suspect identity face matrix snapshot captured and buffered directly for index reference: {entry.ob_number}")
+        
+    if 'evidence_document' in request.files:
+        file = request.files['evidence_document']
+        if file and file.filename != '' and allowed_file(file.filename):
+            filename = secure_filename(f"EVID_{id}_{int(datetime.utcnow().timestamp())}_{file.filename}")
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            entry.evidence_file = filename  
+            commit_audit(f"Binary security verification file artifact logged successfully: {filename}")
+            
+    entry.status = 'INVESTIGATING'
+    db.session.commit()
+    return redirect(url_for('cases'))
+
+@app.route('/cases/resolve/<int:id>', methods=['POST'])
+def resolve_case(id):
+    if not session.get('logged_in'): 
+        return redirect(url_for('login'))
+        
+    entry = OccurrenceBook.query.get_or_404(id)
+    action = request.form.get('resolution_action')
+    notes = request.form.get('resolution_notes', '').strip()
+    
+    if action == 'innocent':
+        entry.status = 'PROVEN INNOCENT'
+        commit_audit(f"Case resolution action vector executed: Charges dropped. Suspect verified innocent for {entry.ob_number}. Notes: {notes}")
+    elif action == 'close':
+        entry.status = 'CLOSED'
+        commit_audit(f"Case resolution action vector executed: Ledger item closed formally for {entry.ob_number}. Notes: {notes}")
+    elif action == 'remove':
+        commit_audit(f"Administrative database structural purge executed. Deleting suspect incident record file: {entry.ob_number}")
+        db.session.delete(entry)
+        db.session.commit()
+        return redirect(url_for('cases'))
+        
+    db.session.commit()
+    return redirect(url_for('cases'))
+
+@app.route('/reports', methods=['GET', 'POST'])
+def reports():
+    if not session.get('logged_in'): 
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        rtype = request.form.get('report_type')
+        fmt = request.form.get('export_format')
+        commit_audit(f"Statistical accounting spreadsheet compiled and downloaded. Target matrix parameter classification: [{rtype}] under format template context extension: [.{fmt}]")
+        flash(f"Data package pipeline processed successfully. Output format trace signature executed under code: {rtype.upper()}-STREAM.{fmt}", "success")
+    return render_template('reports.html')
+
+@app.route('/admin/users', methods=['GET', 'POST'])
+def admin_users():
+    if not session.get('logged_in') or session.get('role') != 'Admin':
+        flash("Privilege error: Access restricted to authorized Command System Administrators.", "danger")
+        return redirect(url_for('dashboard'))
+        
+    if request.method == 'POST':
+        new_user = SystemUser(
+            service_number=request.form['service_number'].strip().upper(),
+            name=request.form['name'].strip(),
+            rank=request.form['rank'].strip(),
+            station=request.form['station'].strip(),
+            role=request.form['role'],
+            password_hash=request.form['password']
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        commit_audit(f"Admin Access Management Action: Provisioned new deployment profile context for agent user node [{new_user.service_number}]")
+        return redirect(url_for('admin_users'))
+        
+    users = SystemUser.query.all()
+    return render_template('admin_users.html', users=users)
+
+@app.route('/audit-logs')
+def audit_logs():
+    if not session.get('logged_in') or session.get('role') != 'Admin':
+        return redirect(url_for('dashboard'))
+    logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
+    return render_template('audit_logs.html', logs=logs)
+
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+        if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
+            root_admin = SystemUser(
+                service_number='NPS/ADMIN/001',
+                name='Commissioner Gitungo',
+                rank='Senior Director Systems Architecture',
+                station='Nyeri Central Police Station',
+                role='Admin',
+                password_hash='admin123'
+            )
+            db.session.add(root_admin)
+            db.session.commit()
+            
+    bind_port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=bind_port)
