@@ -121,7 +121,8 @@ def dashboard():
     return render_template('dashboard.html', total_ob=total_ob, active_cases=active_cases, concluded=concluded)
 
 @app.route('/ob/view', methods=['GET', 'POST'])
-def view_ob():
+def register_ob():
+    """Renamed to register_ob to cleanly resolve layout URL building restrictions."""
     if not session.get('logged_in'): return redirect(url_for('login'))
     
     if request.method == 'POST':
@@ -140,18 +141,10 @@ def view_ob():
         db.session.add(new_entry)
         db.session.commit()
         commit_audit(f"New occurrence record compiled successfully into local node data storage arrays: [{ob_serial}]")
-        return redirect(url_for('view_ob'))
+        return redirect(url_for('register_ob'))
         
     entries = OccurrenceBook.query.order_by(OccurrenceBook.date_time.desc()).all()
     return render_template('view_ob.html', entries=entries)
-
-# ==========================================
-# ALIAS BRIDGE MAP FOR JINJA TEMPLATE COMPATIBILITY
-# ==========================================
-@app.route('/ob/register-legacy-bridge')
-def register_ob():
-    """Catches legacy 'register_ob' url_for calls from templates and bridges seamlessly to view_ob."""
-    return redirect(url_for('view_ob'))
 
 @app.route('/ob/receipt/<int:id>')
 def print_receipt(id):
