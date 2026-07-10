@@ -11,6 +11,7 @@ app.secret_key = 'nps_core_infrastructure_secure_encryption_vector_key'
 # ==========================================
 # PRODUCTION RENDER PERSISTENT DISK ARCHITECTURE
 # ==========================================
+# This checks if Render's Persistent Disk exists at /data, otherwise falls back to local computer testing
 if os.path.exists('/data'):
     UPLOAD_FOLDER = '/data/uploads'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/dpobcms_core.db'
@@ -262,11 +263,9 @@ def audit_logs():
 
 if __name__ == '__main__':
     with app.app_context():
-        # FORCE A CLEAN SLATE FOR DEPLOYMENT RECOVERY
-        db.drop_all() 
+        # db.drop_all()  <-- REMOVED TO PREVENT AUTOMATIC RESET DROPS
         db.create_all()
         
-        # Verify and force seed insertion
         if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
             root_admin = SystemUser(
                 service_number='NPS/ADMIN/001',
@@ -278,7 +277,7 @@ if __name__ == '__main__':
             )
             db.session.add(root_admin)
             db.session.commit()
-            print("🚀 Core Administrative Credentials seeded successfully into local storage matrix.")
+            print("🚀 Core Administrative Credentials seeded successfully.")
             
     bind_port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=bind_port)
