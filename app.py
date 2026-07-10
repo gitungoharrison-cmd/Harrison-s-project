@@ -11,7 +11,6 @@ app.secret_key = 'nps_core_infrastructure_secure_encryption_vector_key'
 # ==========================================
 # PRODUCTION RENDER PERSISTENT DISK ARCHITECTURE
 # ==========================================
-# This checks if Render's Persistent Disk exists at /data, otherwise falls back to local computer testing
 if os.path.exists('/data'):
     UPLOAD_FOLDER = '/data/uploads'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////data/dpobcms_core.db'
@@ -123,30 +122,41 @@ def dashboard():
     return render_template('dashboard.html', total_ob=total_ob, active_cases=active_cases, concluded=concluded)
 
 # -------------------------------------------------------------
-# DUAL OB ENDPOINTS TO RECONCILE ALL JINJA TEMPLATE LINKS
+# CORE LOGIC: INPUT DATA PIPELINE FOR OB RECORDS
 # -------------------------------------------------------------
 @app.route('/ob/view', methods=['GET', 'POST'])
 def register_ob():
-    """Handles references to url_for('register_ob')"""
     if not session.get('logged_in'): 
         return redirect(url_for('login'))
     
     if request.method == 'POST':
+        # Safely extract data from the HTML form inputs
+        comp_name = request.form.get('complainant_name')
+        comp_phone = request.form.get('complainant_phone')
+        offence = request.form.get('nature_of_offence')
+        desc_details = request.form.get('details')
+        
+        # Validation fallbacks to protect database writes
+        if not comp_name or not comp_phone or not offence or not desc_details:
+            flash("Data missing error: Complete all fields to file an official OB record entry.", "danger")
+            return redirect(url_for('register_ob'))
+            
         count = OccurrenceBook.query.count() + 1
         ob_serial = f"OB/{datetime.now().year}/{count:06d}"
         
         new_entry = OccurrenceBook(
             ob_number=ob_serial,
             jurisdiction=session.get('station', 'Nyeri Central Police Station'),
-            complainant_name=request.form['complainant_name'].strip(),
-            complainant_phone=request.form['complainant_phone'].strip(),
-            nature_of_offence=request.form['nature_of_offence'].strip(),
-            details=request.form['details'].strip(),
+            complainant_name=comp_name.strip(),
+            complainant_phone=comp_phone.strip(),
+            nature_of_offence=offence.strip(),
+            details=desc_details.strip(),
             recorded_by=session.get('service_number', 'NPS-DESK')
         )
         db.session.add(new_entry)
         db.session.commit()
-        commit_audit(f"New occurrence record compiled successfully into local node data storage arrays: [{ob_serial}]")
+        commit_audit(f"New occurrence record compiled successfully: [{ob_serial}]")
+        flash(f"Success: Incident Record logged officially under reference: {ob_serial}", "success")
         return redirect(url_for('register_ob'))
         
     entries = OccurrenceBook.query.order_by(OccurrenceBook.date_time.desc()).all()
@@ -154,10 +164,11 @@ def register_ob():
 
 @app.route('/ob/view-legacy-bridge')
 def view_ob():
-    """Handles references to url_for('view_ob') without changing template files"""
     return redirect(url_for('register_ob'))
-# -------------------------------------------------------------
 
+# -------------------------------------------------------------
+# CORE LOGIC: GENERATE PRINTABLE RECEIPT
+# -------------------------------------------------------------
 @app.route('/ob/receipt/<int:id>')
 def print_receipt(id):
     if not session.get('logged_in'): 
@@ -181,7 +192,7 @@ def upload_evidence(id):
     snapshot = request.form.get('camera_snapshot_data')
     if snapshot and snapshot.startswith('data:image'):
         entry.suspect_photo = snapshot
-        commit_audit(f"Suspect identity face matrix snapshot captured and buffered directly for index reference: {entry.ob_number}")
+        commit_audit(f"Suspect identity face matrix snapshot captured: {entry.ob_number}")
         
     if 'evidence_document' in request.files:
         file = request.files['evidence_document']
@@ -190,7 +201,7 @@ def upload_evidence(id):
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             entry.evidence_file = filename  
-            commit_audit(f"Binary security verification file artifact logged successfully: {filename}")
+            commit_audit(f"Binary security verification file artifact logged: {filename}")
             
     entry.status = 'INVESTIGATING'
     db.session.commit()
@@ -207,12 +218,12 @@ def resolve_case(id):
     
     if action == 'innocent':
         entry.status = 'PROVEN INNOCENT'
-        commit_audit(f"Case resolution action vector executed: Charges dropped. Suspect verified innocent for {entry.ob_number}. Notes: {notes}")
+        commit_audit(f"Case dropped: Verified innocent for {entry.ob_number}. Notes: {notes}")
     elif action == 'close':
         entry.status = 'CLOSED'
-        commit_audit(f"Case resolution action vector executed: Ledger item closed formally for {entry.ob_number}. Notes: {notes}")
+        commit_audit(f"Ledger item closed formally for {entry.ob_number}. Notes: {notes}")
     elif action == 'remove':
-        commit_audit(f"Administrative database structural purge executed. Deleting suspect incident record file: {entry.ob_number}")
+        commit_audit(f"Purge request: Deleting suspect record file: {entry.ob_number}")
         db.session.delete(entry)
         db.session.commit()
         return redirect(url_for('cases'))
@@ -227,28 +238,43 @@ def reports():
     if request.method == 'POST':
         rtype = request.form.get('report_type')
         fmt = request.form.get('export_format')
-        commit_audit(f"Statistical accounting spreadsheet compiled and downloaded. Target matrix parameter classification: [{rtype}] under format template context extension: [.{fmt}]")
-        flash(f"Data package pipeline processed successfully. Output format trace signature executed under code: {rtype.upper()}-STREAM.{fmt}", "success")
+        commit_audit(f"Report matrix generation request: [{rtype}] under template context: [.{fmt}]")
+        flash(f"Data stream compiled successfully as: {rtype.upper()}-DATA-STREAM.{fmt}", "success")
     return render_template('reports.html')
 
+# -------------------------------------------------------------
+# CORE LOGIC: REGISTER AN OFFICER (ADMIN PANEL ACTION)
+# -------------------------------------------------------------
 @app.route('/admin/users', methods=['GET', 'POST'])
 def admin_users():
     if not session.get('logged_in') or session.get('role') != 'Admin':
-        flash("Privilege error: Access restricted to authorized Command System Administrators.", "danger")
+        flash("Privilege error: Access restricted to authorized Command Administrators.", "danger")
         return redirect(url_for('dashboard'))
         
     if request.method == 'POST':
+        srv = request.form.get('service_number')
+        name_str = request.form.get('name')
+        rank_str = request.form.get('rank')
+        stn = request.form.get('station')
+        role_str = request.form.get('role')
+        pwd_str = request.form.get('password')
+        
+        if not srv or not name_str or not pwd_str:
+            flash("Form incomplete: Profile data could not be saved to system registry.", "danger")
+            return redirect(url_for('admin_users'))
+            
         new_user = SystemUser(
-            service_number=request.form['service_number'].strip().upper(),
-            name=request.form['name'].strip(),
-            rank=request.form['rank'].strip(),
-            station=request.form['station'].strip(),
-            role=request.form['role'],
-            password_hash=request.form['password']
+            service_number=srv.strip().upper(),
+            name=name_str.strip(),
+            rank=rank_str.strip() if rank_str else 'Officer',
+            station=stn.strip() if stn else session.get('station', 'Nyeri Central'),
+            role=role_str if role_str else 'Officer',
+            password_hash=pwd_str
         )
         db.session.add(new_user)
         db.session.commit()
-        commit_audit(f"Admin Access Management Action: Provisioned new deployment profile context for agent user node [{new_user.service_number}]")
+        commit_audit(f"Admin Action: Registered profile context for officer node [{new_user.service_number}]")
+        flash(f"Success: Active Profile created for Officer {new_user.name} ({new_user.service_number})", "success")
         return redirect(url_for('admin_users'))
         
     users = SystemUser.query.all()
@@ -261,11 +287,13 @@ def audit_logs():
     logs = AuditLog.query.order_by(AuditLog.timestamp.desc()).all()
     return render_template('audit_logs.html', logs=logs)
 
+@app.route('/public-portal')
+def public_portal():
+    return render_template('public_portal.html')
+
 if __name__ == '__main__':
     with app.app_context():
-        # db.drop_all()  <-- REMOVED TO PREVENT AUTOMATIC RESET DROPS
         db.create_all()
-        
         if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
             root_admin = SystemUser(
                 service_number='NPS/ADMIN/001',
@@ -277,7 +305,6 @@ if __name__ == '__main__':
             )
             db.session.add(root_admin)
             db.session.commit()
-            print("🚀 Core Administrative Credentials seeded successfully.")
             
     bind_port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=bind_port)
