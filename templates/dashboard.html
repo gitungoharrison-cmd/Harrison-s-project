@@ -1,109 +1,55 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="space-y-6">
-    <!-- Top Central Command Header Banner -->
-    <div class="bg-[#1e293b] border border-[#334155] p-6 rounded-lg flex flex-wrap justify-between items-center gap-4">
-        <div>
-            <h2 class="text-xl font-bold text-white uppercase tracking-wide font-mono">National Police Service Command Matrix</h2>
-            <p class="text-xs text-slate-400 font-mono mt-1">Operational Environment Track: Synchronized Data Stream Partition</p>
-        </div>
-        
-        <!-- Blinking System Status Indicator Beacon Node Container -->
-        <div class="flex items-center space-x-3 bg-[#0f172a] border border-[#334155] px-4 py-2 rounded-md font-mono">
-            <div class="relative flex h-3 w-3">
-                <!-- Outer Pulse Glow Halo Rings -->
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
-                <!-- Inner Hard Solid Core Red Light Particle -->
-                <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+<div class="row g-4 mt-2">
+    <div class="col-md-4">
+        <a href="{{ url_for('dashboard') }}" class="text-decoration-none">
+            <div class="card p-4 text-center border-0 shadow" style="background-color: #112240; color: white;">
+                <div class="fs-1 mb-2">📊</div>
+                <h5>Station Dashboard</h5>
             </div>
-            <span class="text-[11px] uppercase tracking-wider font-bold text-slate-300">Live Station Node Monitor</span>
-        </div>
+        </a>
     </div>
 
-    <!-- Central Analytics Statistical View Data Rows Matrix Grid Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- Metric Node 1: Total Intake Volume -->
-        <div class="bg-[#2ec4b6] border border-[#2ec4b6]/40 p-5 rounded-lg shadow-lg relative overflow-hidden group hover:scale-[1.01] transition-transform duration-200">
-            <div class="flex justify-between items-start">
-                <div>
-                    <span class="text-[11px] uppercase font-bold tracking-widest text-[#0f172a]/70 font-mono block mb-1">Total Ledger Volume</span>
-                    <!-- Dashboard Text Set to Solid High Contrast Black -->
-                    <h3 class="text-4xl font-extrabold font-mono text-black">{{ total_ob }}</h3>
-                </div>
-                <span class="text-3xl text-[#0f172a]/50">📖</span>
+    <div class="col-md-4">
+        <a href="{{ url_for('register_ob') }}" class="text-decoration-none">
+            <div class="card p-4 text-center border-0 shadow" style="background-color: #112240; color: white;">
+                <div class="fs-1 mb-2">📝</div>
+                <h5>New OB Intake</h5>
             </div>
-            <div class="mt-4 text-[11px] font-mono text-[#0f172a]/80 border-t border-[#0f172a]/20 pt-2">
-                All records parsed across station partition
-            </div>
-        </div>
-
-        <!-- Metric Node 2: Active Investigation Processes -->
-        <div class="bg-amber-400 border border-amber-500/40 p-5 rounded-lg shadow-lg relative overflow-hidden group hover:scale-[1.01] transition-transform duration-200">
-            <div class="flex justify-between items-start">
-                <div>
-                    <span class="text-[11px] uppercase font-bold tracking-widest text-[#0f172a]/70 font-mono block mb-1">Under Investigation</span>
-                    <!-- Dashboard Text Set to Solid High Contrast Black -->
-                    <h3 class="text-4xl font-extrabold font-mono text-black">{{ active_cases }}</h3>
-                </div>
-                <span class="text-3xl text-[#0f172a]/50">🔍</span>
-            </div>
-            <div class="mt-4 text-[11px] font-mono text-[#0f172a]/80 border-t border-amber-600/20 pt-2">
-                Requires proactive intelligence collection operations
-            </div>
-        </div>
-
-        <!-- Metric Node 3: Authenticated Force Personnel Count -->
-        <div class="bg-slate-300 border border-slate-400/40 p-5 rounded-lg shadow-lg relative overflow-hidden group hover:scale-[1.01] transition-transform duration-200">
-            <div class="flex justify-between items-start">
-                <div>
-                    <span class="text-[11px] uppercase font-bold tracking-widest text-[#0f172a]/70 font-mono block mb-1">Authorized Force Roster</span>
-                    <!-- Dashboard Text Set to Solid High Contrast Black -->
-                    <h3 class="text-4xl font-extrabold font-mono text-black">{{ total_officers }}</h3>
-                </div>
-                <span class="text-3xl text-[#0f172a]/50">👥</span>
-            </div>
-            <div class="mt-4 text-[11px] font-mono text-[#0f172a]/80 border-t border-slate-400/60 pt-2">
-                Provisioned user keys inside network boundaries
-            </div>
-        </div>
+        </a>
     </div>
 
-    <!-- Bottom Display Partition: Live Activity Real-Time Feed Row Segment -->
-    <div class="bg-[#1e293b] border border-[#334155] p-6 rounded-lg">
-        <div class="flex justify-between items-center mb-4 border-b border-[#334155] pb-3">
-            <h4 class="text-xs font-bold text-white uppercase font-mono tracking-wider flex items-center space-x-2">
-                <span>📋</span> <span>Recent Entry Pipeline Transcripts (Latest 5 Logs)</span>
-            </h4>
-            <a href="{{ url_for('view_ob') }}" class="text-[11px] font-mono text-[#2ec4b6] border border-[#2ec4b6]/30 hover:border-[#2ec4b6] bg-[#2ec4b6]/5 px-3 py-1 rounded transition">
-                View Entire Book &rarr;
-            </a>
-        </div>
-
-        <div class="space-y-3 font-mono text-xs">
-            {% if not recent_ob %}
-            <div class="bg-[#0f172a] border border-[#334155] p-6 text-center text-[#64748b]">
-                No recent entries compiled into the buffer logs.
+    <div class="col-md-4">
+        <a href="{{ url_for('register_ob') }}" class="text-decoration-none">
+            <div class="card p-4 text-center border-0 shadow" style="background-color: #112240; color: white;">
+                <div class="fs-1 mb-2">📖</div>
+                <h5>Digital OB Feed</h5>
             </div>
-            {% else %}
-                {% for entry in recent_ob %}
-                <div class="bg-[#0f172a] border border-[#334155] p-4 rounded hover:border-[#475569] transition flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                    <div class="space-y-1">
-                        <div class="flex items-center space-x-3">
-                            <span class="text-[#2ec4b6] font-bold">{{ entry.ob_number }}</span>
-                            <span class="text-[10px] bg-[#334155] text-slate-300 px-1.5 py-0.5 rounded">{{ entry.nature_of_offence }}</span>
-                        </div>
-                        <p class="text-slate-400 text-[11px] line-clamp-1 max-w-xl">Complainant: <strong class="text-white font-normal">{{ entry.complainant_name }}</strong> — {{ entry.details }}</p>
-                    </div>
-                    <div class="text-right shrink-0">
-                        <span class="block text-[11px] text-slate-500">{{ entry.date_time.strftime('%H:%M:%S UTC') }}</span>
-                        <span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase mt-1 {% if entry.status == 'Pending Review' %}bg-rose-500/10 text-rose-400 border border-rose-500/20{% else %}bg-teal-500/10 text-[#2ec4b6] border border-teal-500/20{% endif %}">
-                            {{ entry.status }}
-                        </span>
-                    </div>
-                </div>
-                {% endfor %}
-            {% endif %}
-        </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="{{ url_for('cases') }}" class="text-decoration-none">
+            <div class="card p-4 text-center border-0 shadow" style="background-color: #112240; color: white;">
+                <div class="fs-1 mb-2">🔍</div>
+                <h5>Investigation Matrix</h5>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="{{ url_for('reports') }}" class="text-decoration-none">
+            <div class="card p-4 text-center border-0 shadow" style="background-color: #112240; color: white;">
+                <div class="fs-1 mb-2">📊</div>
+                <h5>Data Exports (.XLSX)</h5>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="{{ url_for('logout') }}" class="text-decoration-none">
+            <div class="card p-4 text-center border-0 shadow" style="background-color: #722f37; color: white;">
+                <div class="fs-1 mb-2">🚪</div>
+                <h5>Terminate Session</h5>
+            </div>
+        </a>
     </div>
 </div>
-{% endblock %}
