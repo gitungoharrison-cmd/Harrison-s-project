@@ -262,7 +262,11 @@ def audit_logs():
 
 if __name__ == '__main__':
     with app.app_context():
+        # FORCE A CLEAN SLATE FOR DEPLOYMENT RECOVERY
+        db.drop_all() 
         db.create_all()
+        
+        # Verify and force seed insertion
         if not SystemUser.query.filter_by(service_number='NPS/ADMIN/001').first():
             root_admin = SystemUser(
                 service_number='NPS/ADMIN/001',
@@ -274,6 +278,7 @@ if __name__ == '__main__':
             )
             db.session.add(root_admin)
             db.session.commit()
+            print("🚀 Core Administrative Credentials seeded successfully into local storage matrix.")
             
     bind_port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=bind_port)
